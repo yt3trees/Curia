@@ -31,6 +31,7 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
     private readonly ProjectDiscoveryService _discoveryService;
     private readonly TrayService _trayService;
     private readonly ScheduleService _scheduleService;
+    private readonly PomodoroViewModel _pomodoroViewModel;
 
     public DashboardPage(
         DashboardViewModel viewModel,
@@ -44,7 +45,8 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
         CaptureService captureService,
         ProjectDiscoveryService discoveryService,
         TrayService trayService,
-        ScheduleService scheduleService)
+        ScheduleService scheduleService,
+        PomodoroViewModel pomodoroViewModel)
     {
         ViewModel = viewModel;
         _llmClientService = llmClientService;
@@ -58,6 +60,7 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
         _discoveryService = discoveryService;
         _trayService = trayService;
         _scheduleService = scheduleService;
+        _pomodoroViewModel = pomodoroViewModel;
         DataContext = ViewModel;
 
         ViewModel.OnOpenInEditor = project =>
@@ -74,6 +77,217 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
 
         InitializeComponent();
         InitAutoRefreshCombo();
+        InitPomodoro();
+    }
+
+    private PomodoroFloatWindow? _floatWindow;
+
+    private void InitPomodoro()
+    {
+        _pomodoroViewModel.PomodoroService.Tick += OnPomodoroTick;
+        _pomodoroViewModel.OnSessionCompleted = OnPomodoroSessionCompleted;
+        _ = _pomodoroViewModel.InitAsync();
+    }
+
+    private void OnPomodoroTick(TimeSpan remaining)
+    {
+        var state = _pomodoroViewModel.PomodoroService.State;
+        PomodoroIcon.Text      = state == PomodoroState.Break ? "☕" : (state == PomodoroState.Paused ? "⏸" : "▶");
+        PomodoroTimerText.Text = $"{(int)remaining.TotalMinutes:D2}:{remaining.Seconds:D2}";
+        _floatWindow?.UpdateDisplay(remaining, state);
+        // フロートで Pause/Resume した場合にツールバーアイコンを同期
+        if (state == PomodoroState.Paused) PomodoroIcon.Text = "⏸";
+    }
+
+    private void OnPomodoroSessionCompleted(PomodoroSession session)
+    {
+        _floatWindow?.Close();
+        _floatWindow = null;
+
+        PomodoroIcon.Text = "🍅";
+        PomodoroTimerText.Text = $"{_pomodoroViewModel.SelectedDurationMinutes:D2}:00";
+        PomodoroInterruptBtn.Visibility = System.Windows.Visibility.Collapsed;
+
+        var owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+        var completeWin = new PomodoroCompleteWindow(_pomodoroViewModel.PomodoroService, session, owner);
+        completeWin.OnBreakRequested = () => _ = _pomodoroViewModel.StartBreakAsync();
+        completeWin.Show();
+    }
+
+    private void OnPomodoroClick(object sender, RoutedEventArgs e)
+    {
+        var state = _pomodoroViewModel.PomodoroService.State;
+
+        if (state == PomodoroState.Idle)
+        {
+            var owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+            var dialog = new PomodoroStartDialog(_pomodoroViewModel, owner);
+            if (dialog.ShowDialog() == true && dialog.Result != null)
+            {
+                _pomodoroViewModel.StartSession(dialog.Result);
+                PomodoroIcon.Text = "▶";
+                PomodoroInterruptBtn.Visibility = System.Windows.Visibility.Visible;
+
+                _floatWindow?.Close();
+                _floatWindow = new PomodoroFloatWindow(_pomodoroViewModel.PomodoroService);
+                _floatWindow.OnStopRequested = () => OnPomodoroInterruptClick(this, new RoutedEventArgs());
+                _floatWindow.Show();
+            }
+        }
+        else if (state == PomodoroState.Running)
+        {
+            _pomodoroViewModel.Pause();
+            PomodoroIcon.Text = "⏸";
+            // 非表示になっていたら再表示
+            if (_floatWindow?.IsVisible == false) _floatWindow.Show();
+        }
+        else if (state == PomodoroState.Paused)
+        {
+            _pomodoroViewModel.PomodoroService.Resume();
+            PomodoroIcon.Text = "▶";
+            if (_floatWindow?.IsVisible == false) _floatWindow.Show();
+        }
+        else if (state == PomodoroState.Break)
+        {
+            _pomodoroViewModel.Interrupt();
+            PomodoroIcon.Text = "🍅";
+            PomodoroTimerText.Text = $"{_pomodoroViewModel.SelectedDurationMinutes:D2}:00";
+            PomodoroInterruptBtn.Visibility = System.Windows.Visibility.Collapsed;
+            _floatWindow?.Close();
+            _floatWindow = null;
+        }
+    }
+
+    private void OnPomodoroInterruptClick(object sender, RoutedEventArgs e)
+    {
+        var owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+        var choice = ShowPomodoroEndChoiceDialog(owner);
+        if (choice == null) return;
+
+        if (choice == "early")
+        {
+            // FinishEarly → SessionCompleted が発火 → OnPomodoroSessionCompleted がフロートも閉じる
+            _pomodoroViewModel.FinishEarly();
+        }
+        else
+        {
+            _pomodoroViewModel.Interrupt();
+            PomodoroIcon.Text = "🍅";
+            PomodoroTimerText.Text = $"{_pomodoroViewModel.SelectedDurationMinutes:D2}:00";
+            PomodoroInterruptBtn.Visibility = System.Windows.Visibility.Collapsed;
+            _floatWindow?.Close();
+            _floatWindow = null;
+        }
+    }
+
+    private static string? ShowPomodoroEndChoiceDialog(Window owner)
+    {
+        string? result = null;
+
+        var res = Application.Current.Resources;
+        System.Windows.Media.Brush Bg()    => res["AppSurface0"] as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Black;
+        System.Windows.Media.Brush Surf1() => res["AppSurface1"] as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.DimGray;
+        System.Windows.Media.Brush Surf2() => res["AppSurface2"] as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.Gray;
+        System.Windows.Media.Brush Txt()   => res["AppText"]     as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.White;
+        System.Windows.Media.Brush Sub()   => res["AppSubtext0"] as System.Windows.Media.Brush ?? System.Windows.Media.Brushes.LightGray;
+        System.Windows.Media.Brush Acc()   => res.Contains("AppPeach")
+            ? res["AppPeach"] as System.Windows.Media.Brush ?? Txt()
+            : Txt();
+
+        // メインウィンドウがオフスクリーン (トレイ収納中) のときは CenterScreen にフォールバック
+        bool ownerVisible = owner.Left > -10000;
+        var dlg = new Window
+        {
+            Owner = ownerVisible ? owner : null,
+            WindowStyle = WindowStyle.None,
+            ResizeMode = ResizeMode.NoResize,
+            SizeToContent = SizeToContent.Height,
+            MinHeight = 0,
+            Width = 340,
+            ShowInTaskbar = false,
+            WindowStartupLocation = ownerVisible
+                ? WindowStartupLocation.CenterOwner
+                : WindowStartupLocation.CenterScreen,
+            Background = Bg(),
+        };
+
+        // タイトルバー
+        var titleBar = new System.Windows.Controls.Grid { Height = 36, Background = Surf1(), Cursor = System.Windows.Input.Cursors.SizeAll };
+        titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = System.Windows.GridLength.Auto });
+        titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new System.Windows.GridLength(1, System.Windows.GridUnitType.Star) });
+        titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = System.Windows.GridLength.Auto });
+
+        var iconTb = new System.Windows.Controls.TextBlock { Text = "🍅", FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 6, 0) };
+        System.Windows.Controls.Grid.SetColumn(iconTb, 0);
+        var titleTb = new System.Windows.Controls.TextBlock { Text = "End Session", Foreground = Txt(), FontWeight = FontWeights.SemiBold, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+        System.Windows.Controls.Grid.SetColumn(titleTb, 1);
+        var closeX = new System.Windows.Controls.Button { Content = "✕", Width = 36, Height = 36, Background = System.Windows.Media.Brushes.Transparent, BorderBrush = System.Windows.Media.Brushes.Transparent, Foreground = Sub(), FontSize = 12, Cursor = System.Windows.Input.Cursors.Hand };
+        closeX.Click += (_, _) => dlg.Close();
+        System.Windows.Controls.Grid.SetColumn(closeX, 2);
+        titleBar.Children.Add(iconTb);
+        titleBar.Children.Add(titleTb);
+        titleBar.Children.Add(closeX);
+        titleBar.MouseLeftButtonDown += (_, e2) => { if (e2.ButtonState == MouseButtonState.Pressed) dlg.DragMove(); };
+
+        // コンテンツ
+        var body = new System.Windows.Controls.StackPanel { Margin = new Thickness(16, 12, 16, 16) };
+        body.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = "How did the session end?",
+            Foreground = Sub(),
+            FontSize = 12,
+            Margin = new Thickness(0, 0, 0, 12)
+        });
+
+        var btnRow = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right };
+
+        System.Windows.Controls.Button MakeBtn(string label, bool primary)
+        {
+            var bg = primary ? Acc() : Surf1();
+            var fg = primary ? System.Windows.Media.Brushes.Black : Txt();
+            return new System.Windows.Controls.Button
+            {
+                Content = label,
+                MinWidth = 80,
+                Height = 28,
+                Padding = new Thickness(10, 0, 10, 0),
+                FontSize = 12,
+                Background = bg,
+                Foreground = fg,
+                BorderBrush = Surf2(),
+                BorderThickness = new Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand,
+            };
+        }
+
+        var interruptBtn = MakeBtn("Interrupted", false);
+        interruptBtn.Click += (_, _) => { result = "interrupt"; dlg.Close(); };
+
+        var earlyBtn = MakeBtn("Finished Early ✓", true);
+        earlyBtn.Margin = new Thickness(8, 0, 0, 0);
+        earlyBtn.Click += (_, _) => { result = "early"; dlg.Close(); };
+
+        btnRow.Children.Add(interruptBtn);
+        btnRow.Children.Add(earlyBtn);
+        body.Children.Add(btnRow);
+
+        // ルートグリッド
+        var root = new System.Windows.Controls.Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = System.Windows.GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = System.Windows.GridLength.Auto });
+        System.Windows.Controls.Grid.SetRow(titleBar, 0);
+        System.Windows.Controls.Grid.SetRow(body, 1);
+        root.Children.Add(titleBar);
+        root.Children.Add(body);
+
+        var border = new System.Windows.Controls.Border { BorderBrush = Surf2(), BorderThickness = new Thickness(1), IsHitTestVisible = false };
+        System.Windows.Controls.Grid.SetRowSpan(border, 2);
+        root.Children.Add(border);
+
+        dlg.Content = root;
+        dlg.KeyDown += (_, e2) => { if (e2.Key == Key.Escape) dlg.Close(); };
+        dlg.ShowDialog();
+        return result;
     }
 
     private void InitAutoRefreshCombo()

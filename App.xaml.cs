@@ -75,6 +75,10 @@ public partial class App : WpfApplication
         // Ask Curia キャッシュウォームアップ
         var curiaQuery = _serviceProvider.GetRequiredService<CuriaQueryService>();
         _ = curiaQuery.WarmCacheAsync();
+
+        // ポモドーロ古いログのアーカイブ
+        var pomodoroService = _serviceProvider.GetRequiredService<PomodoroService>();
+        _ = pomodoroService.ArchiveOldLogsAsync();
     }
 
     private static void ConfigureServices(IServiceCollection services)
@@ -117,6 +121,7 @@ public partial class App : WpfApplication
         services.AddSingleton<SilenceAlertService>();
         services.AddSingleton<OutlookCalendarService>();
         services.AddSingleton<IcsCalendarService>();
+        services.AddSingleton<PomodoroService>();
 
         // ViewModels
         services.AddSingleton<MainWindowViewModel>();
@@ -128,6 +133,7 @@ public partial class App : WpfApplication
         services.AddSingleton<SetupViewModel>();
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<CommandPaletteViewModel>();
+        services.AddSingleton<PomodoroViewModel>();
         services.AddSingleton<AgentHubViewModel>();
         services.AddSingleton<WikiViewModel>();
         services.AddSingleton<WeeklyScheduleViewModel>();

@@ -105,6 +105,8 @@ public class StateSnapshotService
             Workstreams = p.Workstreams.Select(BuildWorkstreamEntry).ToList(),
         };
 
+        status.PomodoroToday = BuildPomodoroTodayStatus(contentPath);
+
         return new CuratorProjectEntry
         {
             Name = p.Name,
@@ -120,6 +122,37 @@ public class StateSnapshotService
                 ["context"] = p.JunctionContext,
             },
         };
+    }
+
+    private static PomodoroTodayStatus? BuildPomodoroTodayStatus(string contentPath)
+    {
+        var logPath = Path.Combine(contentPath, "focus_history", "pomodoro", $"{DateTime.Today:yyyy-MM-dd}.md");
+        if (!File.Exists(logPath)) return null;
+
+        try
+        {
+            var lines = File.ReadAllLines(logPath);
+            int completed = 0, interrupted = 0, totalMin = 0;
+            foreach (var line in lines.Where(l => l.StartsWith("- ", StringComparison.Ordinal) && l.Contains("min ")))
+            {
+                if (line.Contains("completed")) completed++;
+                else if (line.Contains("interrupted")) interrupted++;
+                var m = System.Text.RegularExpressions.Regex.Match(line, @"(\d+)min");
+                if (m.Success) totalMin += int.Parse(m.Groups[1].Value);
+            }
+            if (completed == 0 && interrupted == 0) return null;
+            int total = completed + interrupted;
+            return new PomodoroTodayStatus
+            {
+                CompletedSessions = completed,
+                TotalFocusMinutes = totalMin,
+                CompletionRate = total > 0 ? Math.Round(completed * 100.0 / total, 1) : 0
+            };
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static CuratorWorkstreamEntry BuildWorkstreamEntry(WorkstreamInfo ws)

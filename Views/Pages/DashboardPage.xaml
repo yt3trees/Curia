@@ -47,6 +47,24 @@
                                Click="OnShowCaptureLogClick">
                         <ui:SymbolIcon Symbol="Note24"/>
                     </ui:Button>
+                    <!-- ポモドーロタイマーボタン -->
+                    <ui:Button x:Name="PomodoroBtn"
+                               Margin="0,0,4,0" Height="34" Padding="8,0" FontSize="12"
+                               ToolTip="Pomodoro timer — click to start, pause, or stop"
+                               Click="OnPomodoroClick">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="PomodoroIcon" Text="🍅" FontSize="12" VerticalAlignment="Center" Margin="0,-1,4,0"/>
+                            <TextBlock x:Name="PomodoroTimerText" Text="25:00" FontSize="12" VerticalAlignment="Center"
+                                       FontFamily="Consolas" Foreground="{DynamicResource AppText}"/>
+                        </StackPanel>
+                    </ui:Button>
+                    <ui:Button x:Name="PomodoroInterruptBtn"
+                               Margin="0,0,4,0" Height="34" Padding="8,0" FontSize="12"
+                               ToolTip="Stop current pomodoro session"
+                               Click="OnPomodoroInterruptClick"
+                               Visibility="Collapsed">
+                        <ui:SymbolIcon Symbol="Stop16"/>
+                    </ui:Button>
                     <TextBlock Text="Auto:" VerticalAlignment="Center" Margin="0,0,4,0"
                                Foreground="{DynamicResource AppSubtext0}" FontSize="12"/>
                     <ComboBox x:Name="AutoRefreshComboBox"

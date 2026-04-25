@@ -397,7 +397,7 @@ public partial class EditorViewModel : ObservableObject
                 && label != "obsidian_notes";
             
             var node = new FileTreeNode { Name = label, FullPath = dir, IsDirectory = true, IsExpanded = shouldExpand };
-            AddDirectoryChildren(node, dir, includeSubdirectories: label == "obsidian_notes");
+            AddDirectoryChildren(node, dir, includeSubdirectories: label == "obsidian_notes" || label == "focus_history");
             TreeNodes.Add(node);
         }
 

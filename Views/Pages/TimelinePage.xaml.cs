@@ -135,6 +135,9 @@ public partial class TimelinePage : WpfUserControl, INavigableView<TimelineViewM
     private void OnToggleWork(object sender, RoutedEventArgs e)
         => ViewModel.ShowWork = !ViewModel.ShowWork;
 
+    private void OnTogglePomodoro(object sender, RoutedEventArgs e)
+        => ViewModel.ShowPomodoro = !ViewModel.ShowPomodoro;
+
     private void OnHeatmapBodyPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (sender is not ScrollViewer scrollViewer)

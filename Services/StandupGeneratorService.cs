@@ -147,9 +147,39 @@ public class StandupGeneratorService : IDisposable
             var asanaTasks = GetCompletedAsanaTasks(proj, yesterday);
             foreach (var taskName in asanaTasks)
                 result.Add($"- [{proj.Name}] Asana: {taskName}");
+
+            // ポモドーロ集計
+            var pomodoroSummary = GetPomodoroSummary(proj, yesterday);
+            if (pomodoroSummary != null)
+                result.Add(pomodoroSummary);
         }
 
         return result;
+    }
+
+    private static string? GetPomodoroSummary(ProjectInfo proj, DateTime date)
+    {
+        var logPath = Path.Combine(proj.AiContextContentPath, "focus_history", "pomodoro", $"{date:yyyy-MM-dd}.md");
+        if (!File.Exists(logPath)) return null;
+
+        try
+        {
+            var lines = File.ReadAllLines(logPath);
+            int completed = lines.Count(l => l.StartsWith("- ", StringComparison.Ordinal) && l.Contains("completed"));
+            int totalMin = 0;
+            foreach (var line in lines.Where(l => l.StartsWith("- ", StringComparison.Ordinal) && l.Contains("min ")))
+            {
+                var m = Regex.Match(line, @"(\d+)min");
+                if (m.Success) totalMin += int.Parse(m.Groups[1].Value);
+            }
+            if (completed == 0 && totalMin == 0) return null;
+            return $"- [{proj.Name}] Pomodoro: {completed} sessions, {totalMin} min focus";
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Standup] GetPomodoroSummary failed: {ex.Message}");
+            return null;
+        }
     }
 
     private static List<string> GetCompletedAsanaTasks(ProjectInfo proj, DateTime targetDate)

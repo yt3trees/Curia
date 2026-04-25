@@ -339,13 +339,26 @@
                                         </Style>
                                     </ui:Button.Style>
                                 </ui:Button>
-                                <ui:Button Content="Work" Height="28" Padding="8,0"
+                                <ui:Button Content="Work" Height="28" Padding="8,0" Margin="0,0,4,0"
                                            Click="OnToggleWork">
                                     <ui:Button.Style>
                                         <Style TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
                                             <Setter Property="Appearance" Value="Secondary"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding ShowWork}" Value="True">
+                                                    <Setter Property="Appearance" Value="Primary"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                                <ui:Button Content="Pomodoro" Height="28" Padding="8,0"
+                                           Click="OnTogglePomodoro">
+                                    <ui:Button.Style>
+                                        <Style TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+                                            <Setter Property="Appearance" Value="Secondary"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ShowPomodoro}" Value="True">
                                                     <Setter Property="Appearance" Value="Primary"/>
                                                 </DataTrigger>
                                             </Style.Triggers>

@@ -77,6 +77,16 @@ public class CuratorProjectStatus
     public List<string> UncommittedRepos { get; set; } = [];
     public bool HasWorkstreams { get; set; }
     public List<CuratorWorkstreamEntry> Workstreams { get; set; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PomodoroTodayStatus? PomodoroToday { get; set; }
+}
+
+public class PomodoroTodayStatus
+{
+    public int CompletedSessions { get; set; }
+    public int TotalFocusMinutes { get; set; }
+    public double CompletionRate { get; set; }
 }
 
 public class CuratorWorkstreamEntry

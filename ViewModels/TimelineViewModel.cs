@@ -35,6 +35,7 @@ public partial class TimelineEntryItem : ObservableObject
     {
         "Decision" => "[Decision]",
         "Work" => "[Work]",
+        "Pomodoro" => "[Pomodoro]",
         _ => "[Focus]",
     };
     public string OpenButtonLabel => EntryType == "Work" ? "Open in Explorer" : "Open in Editor";
@@ -124,6 +125,9 @@ public partial class TimelineViewModel : ObservableObject
     private bool showWork = true;
 
     [ObservableProperty]
+    private bool showPomodoro = true;
+
+    [ObservableProperty]
     private string searchText = "";
 
     /// <summary>プロジェクト未選択時は全プロジェクト横断表示モード。</summary>
@@ -206,6 +210,7 @@ public partial class TimelineViewModel : ObservableObject
     partial void OnShowFocusChanged(bool value)    => ApplyEntryFilters();
     partial void OnShowDecisionChanged(bool value) => ApplyEntryFilters();
     partial void OnShowWorkChanged(bool value)     => ApplyEntryFilters();
+    partial void OnShowPomodoroChanged(bool value) => ApplyEntryFilters();
     partial void OnSearchTextChanged(string value) => ApplyEntryFilters();
 
     /// <summary>ファイルIOを行い rawEntries をキャッシュしてフィルタを適用する。</summary>
@@ -259,6 +264,7 @@ public partial class TimelineViewModel : ObservableObject
         if (!ShowFocus)    filtered = filtered.Where(e => e.Type != "Focus");
         if (!ShowDecision) filtered = filtered.Where(e => e.Type != "Decision");
         if (!ShowWork)     filtered = filtered.Where(e => e.Type != "Work");
+        if (!ShowPomodoro) filtered = filtered.Where(e => e.Type != "Pomodoro");
 
         var search = SearchText.Trim();
         if (!string.IsNullOrEmpty(search))
@@ -290,6 +296,7 @@ public partial class TimelineViewModel : ObservableObject
                 "Focus"    => "[Focus] " + raw.PreviewText,
                 "Decision" => "[Decision] " + raw.Topic,
                 "Work"     => "[Work] " + raw.Topic,
+                "Pomodoro" => "[Pomodoro] " + raw.PreviewText,
                 _          => raw.Topic,
             };
 
@@ -317,11 +324,12 @@ public partial class TimelineViewModel : ObservableObject
 
         int focusCount    = rawList.Count(e => e.Type == "Focus");
         int decisionCount = rawList.Count(e => e.Type == "Decision");
+        int pomodoroCount = rawList.Count(e => e.Type == "Pomodoro");
         int workCount     = rawList.Count(e => e.Type == "Work");
         var uniqueDays    = rawList.Select(e => e.Date.Date).Distinct().Count();
         var newest = rawList.First().Date.ToString("yyyy-MM-dd");
         var oldest = rawList.Last().Date.ToString("yyyy-MM-dd");
-        string typeSummary = $"Focus: {focusCount}  Decision: {decisionCount}  Work: {workCount}";
+        string typeSummary = $"Focus: {focusCount}  Decision: {decisionCount}  Work: {workCount}  Pomodoro: {pomodoroCount}";
 
         if (DaysBack > 0)
         {
@@ -691,7 +699,53 @@ public partial class TimelineViewModel : ObservableObject
         if (Directory.Exists(workRoot))
             ScanWorkFolders(workRoot, project, cutoff, rawEntries);
 
+        // Pomodoro logs under focus_history/pomodoro/
+        var pomodoroDir = Path.Combine(project.AiContextContentPath, "focus_history", "pomodoro");
+        if (Directory.Exists(pomodoroDir))
+        {
+            foreach (var file in Directory.EnumerateFiles(pomodoroDir, "????-??-??.md"))
+            {
+                var baseName = Path.GetFileNameWithoutExtension(file);
+                if (DateTime.TryParseExact(baseName, "yyyy-MM-dd",
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.None, out var date)
+                    && date >= cutoff)
+                {
+                    rawEntries.Add(new TimelineRawEntry
+                    {
+                        Date             = date,
+                        Path             = file,
+                        Type             = "Pomodoro",
+                        Topic            = "",
+                        PreviewText      = GetPomodoroPreview(file),
+                        ProjectName      = project.Name,
+                        ProjectHiddenKey = project.HiddenKey,
+                    });
+                }
+            }
+        }
+
         return rawEntries;
+    }
+
+    private static string GetPomodoroPreview(string filePath)
+    {
+        try
+        {
+            var lines = File.ReadAllLines(filePath);
+            int completed = lines.Count(l => l.StartsWith("- ", StringComparison.Ordinal) && l.Contains("completed"));
+            int totalMin = 0;
+            foreach (var line in lines.Where(l => l.StartsWith("- ", StringComparison.Ordinal) && l.Contains("min ")))
+            {
+                var m = Regex.Match(line, @"(\d+)min");
+                if (m.Success) totalMin += int.Parse(m.Groups[1].Value);
+            }
+            return $"{completed} sessions / {totalMin} min";
+        }
+        catch
+        {
+            return "(No preview)";
+        }
     }
 
     /// <summary>
