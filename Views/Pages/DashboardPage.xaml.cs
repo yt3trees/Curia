@@ -30,6 +30,7 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
     private readonly CaptureService _captureService;
     private readonly ProjectDiscoveryService _discoveryService;
     private readonly TrayService _trayService;
+    private readonly ScheduleService _scheduleService;
 
     public DashboardPage(
         DashboardViewModel viewModel,
@@ -42,7 +43,8 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
         AsanaTaskParser asanaTaskParser,
         CaptureService captureService,
         ProjectDiscoveryService discoveryService,
-        TrayService trayService)
+        TrayService trayService,
+        ScheduleService scheduleService)
     {
         ViewModel = viewModel;
         _llmClientService = llmClientService;
@@ -55,6 +57,7 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
         _captureService = captureService;
         _discoveryService = discoveryService;
         _trayService = trayService;
+        _scheduleService = scheduleService;
         DataContext = ViewModel;
 
         ViewModel.OnOpenInEditor = project =>
@@ -5478,6 +5481,44 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
         return (0.2126 * Channel(color.R)) + (0.7152 * Channel(color.G)) + (0.0722 * Channel(color.B));
     }
 
+    private string BuildTodayScheduleHint()
+    {
+        var today = DateTime.Today;
+        var dayOfWeek = (int)today.DayOfWeek;
+        var daysFromMonday = dayOfWeek == 0 ? 6 : dayOfWeek - 1;
+        var weekStart = today.AddDays(-daysFromMonday);
+
+        var blocks = _scheduleService.GetBlocksForWeek(weekStart);
+        var lines = new List<string>();
+
+        foreach (var b in blocks
+            .Where(b => b.Kind == ScheduleBlockKind.Timed
+                     && b.StartAt.HasValue
+                     && b.StartAt.Value.Date == today)
+            .OrderBy(b => b.StartAt!.Value))
+        {
+            var start = b.StartAt!.Value;
+            var end = start.AddMinutes(b.DurationSlots * 30);
+            var label = string.IsNullOrWhiteSpace(b.TitleSnapshot)
+                ? b.ProjectShortName
+                : $"{b.ProjectShortName} {b.TitleSnapshot}";
+            lines.Add($"{start:HH:mm}-{end:HH:mm} {label}");
+        }
+
+        foreach (var b in blocks
+            .Where(b => b.Kind == ScheduleBlockKind.AllDay
+                     && b.StartDate.HasValue && b.StartDate.Value.Date <= today
+                     && b.EndDate.HasValue && b.EndDate.Value.Date >= today))
+        {
+            var label = string.IsNullOrWhiteSpace(b.TitleSnapshot)
+                ? b.ProjectShortName
+                : $"{b.ProjectShortName} {b.TitleSnapshot}";
+            lines.Add($"(all day) {label}");
+        }
+
+        return string.Join("\n", lines);
+    }
+
     private Task<string?> ShowScheduleHintDialogAsync()
     {
         var tcs = new TaskCompletionSource<string?>();
@@ -5559,6 +5600,13 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
             BorderThickness = new Thickness(1),
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
+
+        var prefill = BuildTodayScheduleHint();
+        if (!string.IsNullOrEmpty(prefill))
+        {
+            inputBox.Text = prefill;
+            inputBox.CaretIndex = inputBox.Text.Length;
+        }
 
         var cancelBtn = new Wpf.Ui.Controls.Button
         {
