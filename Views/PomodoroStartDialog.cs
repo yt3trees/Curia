@@ -91,7 +91,8 @@ public class PomodoroStartDialog : Window
             Text = "🍅",
             FontSize = 12,
             VerticalAlignment = WpfVA.Center,
-            Margin = new Thickness(12, 0, 6, 0)
+            Margin = new Thickness(12, 0, 6, 0),
+            Foreground = Text
         };
         Grid.SetColumn(dot, 0);
 
