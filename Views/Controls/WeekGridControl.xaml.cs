@@ -69,6 +69,11 @@ public partial class WeekGridControl : WpfUserControl
     private double _dayColWidth;
     private DispatcherTimer? _clockTimer;
 
+    // Outlook イベントコールバック (WeeklySchedulePage がセット)
+    public Action<Curia.Models.OutlookEvent>? OnLogMeetingNotes { get; set; }
+    public Action<string>? OnOpenAsanaUrl { get; set; }
+    public Action<Curia.Models.ProjectInfo, string>? OnOpenInEditorCallback { get; set; }
+
     // タスク選択ポップアップ
     private Popup? _taskPickerPopup;
     private DateTime _pendingTimedStart;
@@ -493,7 +498,9 @@ public partial class WeekGridControl : WpfUserControl
     {
         // 半透明グレー背景 (読み取り専用を視覚的に表現)
         var bgColor = Color.FromArgb(0x55, 0x6E, 0x76, 0x81);
-        var borderColor = Color.FromArgb(0x99, 0x6E, 0x76, 0x81);
+        var borderColor = ev.HasLinkedTask
+            ? Color.FromArgb(0xCC, 0x00, 0x78, 0xD4)  // リンク済み: アクセントカラー
+            : Color.FromArgb(0x99, 0x6E, 0x76, 0x81);
 
         var timeText = $"{ev.Start:HH:mm} - {ev.End:HH:mm}";
 
@@ -517,6 +524,7 @@ public partial class WeekGridControl : WpfUserControl
             Margin = new Thickness(4, 0, 4, 0),
         };
 
+        var badgeText = ev.HasLinkedTask ? "⛓" : "OL";
         var badge = new Border
         {
             Background = new SolidColorBrush(Color.FromArgb(0x60, 0x6E, 0x76, 0x81)),
@@ -527,9 +535,9 @@ public partial class WeekGridControl : WpfUserControl
             Margin = new Thickness(0, 2, 2, 0),
             Child = new TextBlock
             {
-                Text = "OL",
+                Text = badgeText,
                 FontSize = 9,
-                Foreground = GetBrush("AppSubtext0"),
+                Foreground = ev.HasLinkedTask ? GetBrush("AppBlue") : GetBrush("AppSubtext0"),
             },
         };
 
@@ -541,7 +549,7 @@ public partial class WeekGridControl : WpfUserControl
         if (height >= 40) textPanel.Children.Add(timeBlock);
         content.Children.Add(textPanel);
 
-        return new Border
+        var card = new Border
         {
             Width = Math.Max(4, width),
             Height = height,
@@ -550,9 +558,14 @@ public partial class WeekGridControl : WpfUserControl
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(3),
             ClipToBounds = true,
-            IsHitTestVisible = false,
+            IsHitTestVisible = ev.HasLinkedTask,
             Child = content,
         };
+
+        if (ev.HasLinkedTask)
+            card.ContextMenu = BuildOutlookEventContextMenu(ev);
+
+        return card;
     }
 
     private Border CreateOutlookAllDayCard(OutlookEvent ev, int spanDays,
@@ -570,12 +583,14 @@ public partial class WeekGridControl : WpfUserControl
             Margin = new Thickness(4, 0, 4, 0),
         };
 
-        return new Border
+        var allDayCard = new Border
         {
             Width = Math.Max(4, spanDays * _dayColWidth - 4),
             Height = AllDayLaneHeight - 4,
             Background = new SolidColorBrush(Color.FromArgb(0x44, 0x6E, 0x76, 0x81)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x66, 0x6E, 0x76, 0x81)),
+            BorderBrush = new SolidColorBrush(ev.HasLinkedTask
+                ? Color.FromArgb(0xCC, 0x00, 0x78, 0xD4)
+                : Color.FromArgb(0x66, 0x6E, 0x76, 0x81)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(
                 continuesLeft ? 0 : 3,
@@ -583,9 +598,12 @@ public partial class WeekGridControl : WpfUserControl
                 continuesRight ? 0 : 3,
                 continuesLeft ? 0 : 3),
             ClipToBounds = true,
-            IsHitTestVisible = false,
+            IsHitTestVisible = ev.HasLinkedTask,
             Child = title,
         };
+        if (ev.HasLinkedTask)
+            allDayCard.ContextMenu = BuildOutlookEventContextMenu(ev);
+        return allDayCard;
     }
 
     private void RenderCurrentTimeIndicator()
@@ -932,7 +950,75 @@ public partial class WeekGridControl : WpfUserControl
             });
         }
 
+        // リンク済みタスク情報
+        if (ev.HasLinkedTask)
+        {
+            panel.Children.Add(new System.Windows.Shapes.Rectangle
+            {
+                Height = 1,
+                Fill = GetBrush("AppSurface2"),
+                Margin = new Thickness(0, 6, 0, 4),
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"⛓ {ev.LinkedProjectShortName ?? ""} / {ev.LinkedTaskTitle ?? ev.LinkedAsanaGid}",
+                FontSize = 11,
+                Foreground = GetBrush("AppBlue"),
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 260,
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Right-click to log meeting notes",
+                FontSize = 10,
+                FontStyle = FontStyles.Italic,
+                Foreground = GetBrush("AppSubtext0"),
+                Margin = new Thickness(0, 2, 0, 0),
+            });
+        }
+
         return panel;
+    }
+
+    private System.Windows.Controls.ContextMenu BuildOutlookEventContextMenu(OutlookEvent ev)
+    {
+        var menu = new System.Windows.Controls.ContextMenu();
+
+        if (!string.IsNullOrEmpty(ev.LinkedAsanaGid))
+        {
+            var logItem = new System.Windows.Controls.MenuItem
+            {
+                Header = "Log Meeting Notes...",
+                FontWeight = FontWeights.SemiBold,
+            };
+            logItem.Click += (_, _) => OnLogMeetingNotes?.Invoke(ev);
+            menu.Items.Add(logItem);
+
+            var asanaItem = new System.Windows.Controls.MenuItem
+            {
+                Header = "Open Task in Asana",
+            };
+            asanaItem.Click += (_, _) =>
+            {
+                var url = $"https://app.asana.com/0/0/{ev.LinkedAsanaGid}";
+                OnOpenAsanaUrl?.Invoke(url);
+            };
+            menu.Items.Add(asanaItem);
+
+            if (ev.LinkedProject != null)
+            {
+                var editorItem = new System.Windows.Controls.MenuItem
+                {
+                    Header = "Open Project in Editor",
+                };
+                var capturedProject = ev.LinkedProject;
+                var capturedFocus = capturedProject.FocusFile ?? "";
+                editorItem.Click += (_, _) => OnOpenInEditorCallback?.Invoke(capturedProject, capturedFocus);
+                menu.Items.Add(editorItem);
+            }
+        }
+
+        return menu;
     }
 
     private System.Windows.Controls.ToolTip BuildBlockToolTip(ScheduleBlock block)

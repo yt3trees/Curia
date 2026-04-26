@@ -371,6 +371,43 @@ public class CaptureService
         }
     }
 
+    /// <summary>
+    /// Asana タスクにコメント (story) を追加する。
+    /// エンドポイント: POST /tasks/{gid}/stories { data: { text } }
+    /// </summary>
+    public async Task<(bool Success, string Message)> AddTaskCommentAsync(
+        string taskGid, string commentText, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(taskGid))
+            return (false, "Task GID is empty.");
+
+        var (token, _) = ResolveAsanaToken();
+        if (string.IsNullOrWhiteSpace(token))
+            return (false, "Asana token not configured.");
+
+        try
+        {
+            var uri     = $"https://app.asana.com/api/1.0/tasks/{taskGid}/stories";
+            var payload = JsonSerializer.Serialize(new { data = new { text = commentText } });
+            var req     = new HttpRequestMessage(HttpMethod.Post, uri)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var resp = await Http.SendAsync(req, ct);
+            if (resp.IsSuccessStatusCode)
+                return (true, $"Comment added to task {taskGid}.");
+
+            var err     = await resp.Content.ReadAsStringAsync(ct);
+            var snippet = err.Length > 200 ? err[..200] : err;
+            return (false, $"Asana API error: {(int)resp.StatusCode} {snippet}");
+        }
+        catch (Exception ex)
+        {
+            return (false, $"Asana API error: {ex.Message}");
+        }
+    }
+
     /// <summary>キャッシュを手動クリア (Refresh ボタン用)。</summary>
     public void InvalidateMetaCache(string? projectGid = null)
     {

@@ -158,6 +158,24 @@ public partial class WeeklyScheduleViewModel : ObservableObject
                     block.TitleSnapshot = live.DisplayMainTitle;
             }
 
+            // Outlook/ICS イベントにリンク済みタスクのメタを名寄せ
+            var gidToTask = allTasks
+                .Where(t => !string.IsNullOrEmpty(t.AsanaTaskGid))
+                .GroupBy(t => t.AsanaTaskGid!)
+                .ToDictionary(g => g.Key, g => g.First());
+            var allProjects = await _discoveryService.GetProjectInfoListAsync();
+            foreach (var ev in outlookEvents)
+            {
+                if (!string.IsNullOrEmpty(ev.LinkedAsanaGid)
+                    && gidToTask.TryGetValue(ev.LinkedAsanaGid, out var linkedTask))
+                {
+                    ev.LinkedTaskTitle        = linkedTask.DisplayMainTitle;
+                    ev.LinkedProjectShortName = linkedTask.ProjectShortName;
+                    ev.LinkedProject = allProjects.FirstOrDefault(p =>
+                        p.DisplayName.Contains(linkedTask.ProjectShortName, StringComparison.OrdinalIgnoreCase));
+                }
+            }
+
             var scheduledIdentities = blocksInWeek
                 .Select(b => b.TaskIdentity)
                 .ToHashSet(StringComparer.Ordinal);

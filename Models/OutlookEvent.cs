@@ -25,4 +25,22 @@ public class OutlookEvent
 
     /// <summary>カレンダーアカウント名 (表示用)。</summary>
     public string? CalendarName { get; set; }
+
+    /// <summary>招待本文 (ICS description / Outlook body)。Asana リンク抽出に使用。</summary>
+    public string? Body { get; set; }
+
+    /// <summary>本文中の Asana タスク GID (なければ null)。</summary>
+    public string? LinkedAsanaGid { get; set; }
+
+    /// <summary>リンク済み Asana タスクのタイトル (TodayQueue から名寄せ後にセット)。</summary>
+    public string? LinkedTaskTitle { get; set; }
+
+    /// <summary>リンク済みタスクのプロジェクト短縮名。</summary>
+    public string? LinkedProjectShortName { get; set; }
+
+    /// <summary>リンク済みタスクの ProjectInfo (Editor/Timeline ナビゲーション用)。</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Curia.Models.ProjectInfo? LinkedProject { get; set; }
+
+    public bool HasLinkedTask => !string.IsNullOrEmpty(LinkedAsanaGid);
 }

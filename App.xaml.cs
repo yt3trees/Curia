@@ -72,6 +72,10 @@ public partial class App : WpfApplication
         var scheduleNotification = _serviceProvider.GetRequiredService<ScheduleNotificationService>();
         scheduleNotification.Start();
 
+        // 会議終了フォローアップタイマー起動
+        var meetingFollowup = _serviceProvider.GetRequiredService<MeetingFollowupService>();
+        meetingFollowup.Start();
+
         // Ask Curia キャッシュウォームアップ
         var curiaQuery = _serviceProvider.GetRequiredService<CuriaQueryService>();
         _ = curiaQuery.WarmCacheAsync();
@@ -121,6 +125,7 @@ public partial class App : WpfApplication
         services.AddSingleton<SilenceAlertService>();
         services.AddSingleton<OutlookCalendarService>();
         services.AddSingleton<IcsCalendarService>();
+        services.AddSingleton<MeetingFollowupService>();
         services.AddSingleton<PomodoroService>();
 
         // ViewModels

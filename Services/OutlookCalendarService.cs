@@ -132,7 +132,16 @@ public class OutlookCalendarService
                     string location = "";
                     try { location = (string)item.Location ?? ""; } catch { }
 
-                    events.Add(new OutlookEvent
+                    string? body = null;
+                    try
+                    {
+                        var raw = (string)item.Body;
+                        if (!string.IsNullOrWhiteSpace(raw))
+                            body = raw.Length > 4000 ? raw[..4000] : raw;
+                    }
+                    catch { }
+
+                    var ev = new OutlookEvent
                     {
                         EntryId      = entryId,
                         Subject      = subject,
@@ -141,7 +150,12 @@ public class OutlookCalendarService
                         IsAllDay     = isAllDay,
                         Location     = string.IsNullOrWhiteSpace(location) ? null : location,
                         CalendarName = "Outlook",
-                    });
+                        Body         = body,
+                    };
+                    var link = CalendarLinkService.TryExtractAsanaLink(body);
+                    if (link.HasValue) ev.LinkedAsanaGid = link.Value.Gid;
+
+                    events.Add(ev);
                 }
                 catch { /* アイテム個別のエラーは無視 */ }
                 finally

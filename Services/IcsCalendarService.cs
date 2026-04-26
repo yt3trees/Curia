@@ -105,16 +105,7 @@ public class IcsCalendarService
         // 週と重なるか
         if (start >= weekEnd || end <= weekStart) return;
 
-        result.Add(new OutlookEvent
-        {
-            EntryId      = $"{vEvent.Uid}_{start:yyyyMMddHHmm}",
-            Subject      = vEvent.Summary ?? "(No title)",
-            Start        = start,
-            End          = end,
-            IsAllDay     = isAllDay,
-            Location     = string.IsNullOrWhiteSpace(vEvent.Location) ? null : vEvent.Location,
-            CalendarName = "ICS",
-        });
+        AddEvent(result, vEvent, start, end, isAllDay);
     }
 
     private static void ExpandRecurring(
@@ -150,17 +141,32 @@ public class IcsCalendarService
                 ? ToLocal(occ.Period.EndTime)
                 : (isAllDay ? start.AddDays(1) : start.AddHours(1));
 
-            result.Add(new OutlookEvent
-            {
-                EntryId      = $"{vEvent.Uid}_{start:yyyyMMddHHmm}",
-                Subject      = vEvent.Summary ?? "(No title)",
-                Start        = start,
-                End          = end,
-                IsAllDay     = isAllDay,
-                Location     = string.IsNullOrWhiteSpace(vEvent.Location) ? null : vEvent.Location,
-                CalendarName = "ICS",
-            });
+            AddEvent(result, vEvent, start, end, isAllDay);
         }
+    }
+
+    private static void AddEvent(
+        List<OutlookEvent> result,
+        CalendarEvent vEvent,
+        DateTime start, DateTime end, bool isAllDay)
+    {
+        string? body = vEvent.Description;
+        if (body?.Length > 4000) body = body[..4000];
+
+        var ev = new OutlookEvent
+        {
+            EntryId      = $"{vEvent.Uid}_{start:yyyyMMddHHmm}",
+            Subject      = vEvent.Summary ?? "(No title)",
+            Start        = start,
+            End          = end,
+            IsAllDay     = isAllDay,
+            Location     = string.IsNullOrWhiteSpace(vEvent.Location) ? null : vEvent.Location,
+            CalendarName = "ICS",
+            Body         = string.IsNullOrWhiteSpace(body) ? null : body,
+        };
+        var link = CalendarLinkService.TryExtractAsanaLink(body);
+        if (link.HasValue) ev.LinkedAsanaGid = link.Value.Gid;
+        result.Add(ev);
     }
 
     private static DateTime ToLocal(CalDateTime icalDt)

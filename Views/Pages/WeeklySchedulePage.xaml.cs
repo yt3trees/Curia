@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using Wpf.Ui.Controls;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using Point = System.Windows.Point;
+using Curia.Models;
 using Curia.Services;
 using Curia.ViewModels;
 using Curia.Views.Controls;
@@ -14,12 +16,28 @@ public partial class WeeklySchedulePage : WpfUserControl, INavigableView<WeeklyS
 {
     public WeeklyScheduleViewModel ViewModel { get; }
 
+    private readonly MeetingNotesService _meetingNotesService;
+    private readonly CaptureService _captureService;
+    private readonly ConfigService _configService;
+    private readonly MeetingFollowupService _meetingFollowupService;
+
+    private bool _followupConnected;
+
     private Point _taskDragStart;
     private bool _taskDragInitiated;
 
-    public WeeklySchedulePage(WeeklyScheduleViewModel viewModel)
+    public WeeklySchedulePage(
+        WeeklyScheduleViewModel viewModel,
+        MeetingNotesService meetingNotesService,
+        CaptureService captureService,
+        ConfigService configService,
+        MeetingFollowupService meetingFollowupService)
     {
         ViewModel = viewModel;
+        _meetingNotesService = meetingNotesService;
+        _captureService = captureService;
+        _configService = configService;
+        _meetingFollowupService = meetingFollowupService;
         DataContext = ViewModel;
         InitializeComponent();
     }
@@ -36,7 +54,53 @@ public partial class WeeklySchedulePage : WpfUserControl, INavigableView<WeeklyS
                 mw.NavigateToEditorAndOpenFile(project, filePath);
         };
 
+        // WeekGrid からのコールバック
+        WeekGrid.OnLogMeetingNotes = ev => ShowMeetingNotesDialog(ev);
+        WeekGrid.OnOpenAsanaUrl    = url => { try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { } };
+        WeekGrid.OnOpenInEditorCallback = (project, filePath) =>
+        {
+            if (Window.GetWindow(this) is MainWindow mw)
+                mw.NavigateToEditorAndOpenFile(project, filePath);
+        };
+
+        // MeetingFollowupService のトースト → ダイアログ起動を一度だけ接続
+        if (!_followupConnected)
+        {
+            _followupConnected = true;
+            _meetingFollowupService.OnMeetingEnded = ev =>
+                Dispatcher.Invoke(() => ShowMeetingNotesDialog(ev));
+        }
+
         _ = ViewModel.LoadWeekAsync();
+    }
+
+    // ─── Meeting Notes ダイアログ ──────────────────────────────────────
+
+    private void ShowMeetingNotesDialog(OutlookEvent ev)
+    {
+        var settings = _configService.LoadSettings();
+        if (!settings.AiEnabled)
+        {
+            MessageBox.Show(
+                "AI features are disabled. Enable them in Settings > LLM API first.",
+                "Curia", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (ev.LinkedProject == null)
+        {
+            MessageBox.Show(
+                "Could not find the linked project. Try refreshing the schedule.",
+                "Curia", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var dialog = new MeetingNotesFollowupDialog(
+            ev,
+            _meetingNotesService,
+            _captureService);
+        dialog.Owner = Window.GetWindow(this);
+        dialog.ShowDialog();
     }
 
     // ─── 左ペインのタスク項目のドラッグ開始 ─────────────────────────
