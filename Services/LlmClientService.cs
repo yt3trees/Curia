@@ -14,7 +14,8 @@ namespace Curia.Services;
 public class LlmClientService
 {
     private readonly ConfigService _configService;
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(120) };
+    // 大きな入力 (PDF 取り込み等) でも応答待ちで打ち切られにくいよう余裕を持たせる。
+    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(5) };
 
     public string LastSystemPrompt { get; private set; } = "";
     public string LastUserPrompt   { get; private set; } = "";
@@ -152,7 +153,18 @@ public class LlmClientService
 
         var outputTask = process.StandardOutput.ReadToEndAsync(ct);
         var errorTask  = process.StandardError.ReadToEndAsync(ct);
-        await process.WaitForExitAsync(ct);
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(300));
+        try
+        {
+            await process.WaitForExitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            throw new TimeoutException($"'{exe}' did not respond within 5 minutes.");
+        }
 
         var output = StripAnsi((await outputTask).Trim());
         var error  = SanitizeCliText((await errorTask).Trim());

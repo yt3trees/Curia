@@ -370,6 +370,7 @@ internal static class ProposalReviewDialog
         }
 
         dialog.Show();
+        dialog.Activate();
         return tcs.Task;
     }
 

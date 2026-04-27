@@ -134,6 +134,11 @@ public class WikiIngestService
                 DebugResponse = _llm.LastResponse
             };
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            AppendLog(wikiRoot, "[GenerateProposal] Timed out while waiting for LLM response.");
+            return Fail("LLM request timed out while generating ingest proposal.");
+        }
         catch (OperationCanceledException)
         {
             AppendLog(wikiRoot, "[GenerateProposal] Cancelled.");
@@ -615,7 +620,7 @@ Select up to {MaxUpdateCandidates} existing pages that most likely need updates.
                 renderStream.Seek(0);
 
                 var decoder = await BitmapDecoder.CreateAsync(renderStream);
-                var bitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+                using var bitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
                 var result = await engine.RecognizeAsync(bitmap);
                 var text = (result?.Text ?? string.Empty).Trim();
 

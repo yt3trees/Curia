@@ -688,6 +688,19 @@ public partial class WikiViewModel : ObservableObject
                     var errMsg = $"Error on {Path.GetFileName(file)}: {result.ErrorMessage}";
                     StatusText = errMsg;
                     WikiIngestService.AppendLog(wikiRoot, $"[GenerateProposal] FAILED: {result.ErrorMessage}");
+                    var lowerError = result.ErrorMessage?.ToLowerInvariant() ?? "";
+                    if (lowerError.Contains("cancelled"))
+                    {
+                        _trayService.ShowBalloonTip(
+                            "Wiki Import Cancelled",
+                            $"{Path.GetFileName(file)}: Import was cancelled.");
+                    }
+                    else if (lowerError.Contains("timed out"))
+                    {
+                        _trayService.ShowBalloonTip(
+                            "Wiki Import Timeout",
+                            $"{Path.GetFileName(file)}: LLM request timed out.");
+                    }
                     // 1つ失敗しても次へ進む（必要に応じて break しても良い）
                     await Task.Delay(2000); // エラーメッセージを見せるため少し待機
                     continue;
@@ -738,6 +751,7 @@ public partial class WikiViewModel : ObservableObject
         catch (OperationCanceledException)
         {
             StatusText = "Ingest cancelled.";
+            _trayService.ShowBalloonTip("Wiki Import Cancelled", "Import was cancelled.");
         }
         finally { IsImporting = false; }
     }
