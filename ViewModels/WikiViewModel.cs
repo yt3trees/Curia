@@ -247,6 +247,7 @@ public partial class WikiViewModel : ObservableObject
 
     partial void OnSelectedProjectChanged(ProjectInfo? value)
     {
+        OnPropertyChanged(nameof(IsProjectSelected));
         if (value == null) { HasWiki = false; WikiRoot = ""; Domains.Clear(); SelectedDomain = null; return; }
 
         var contextPath = GetContextPath(value);
