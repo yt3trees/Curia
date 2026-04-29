@@ -668,9 +668,10 @@
                                             <ui:SymbolIcon Symbol="WindowConsole20" FontSize="16"/>
                                             <ui:Button.ContextMenu>
                                                 <ContextMenu>
-                                                    <MenuItem Header="Claude" Tag="claude" Click="OnTermMenuAgent"/>
-                                                    <MenuItem Header="Gemini" Tag="gemini" Click="OnTermMenuAgent"/>
-                                                    <MenuItem Header="Codex"  Tag="codex"  Click="OnTermMenuAgent"/>
+                                                    <MenuItem Header="Claude"  Tag="claude"  Click="OnTermMenuAgent"/>
+                                                    <MenuItem Header="Gemini"  Tag="gemini"  Click="OnTermMenuAgent"/>
+                                                    <MenuItem Header="Codex"   Tag="codex"   Click="OnTermMenuAgent"/>
+                                                    <MenuItem Header="Copilot" Tag="copilot" Click="OnTermMenuAgent"/>
                                                 </ContextMenu>
                                             </ui:Button.ContextMenu>
                                         </ui:Button>
