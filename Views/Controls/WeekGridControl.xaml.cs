@@ -845,13 +845,21 @@ public partial class WeekGridControl : WpfUserControl
         };
         // ToolTip は「同じ要素上に留まる限り一度しか開かない」ため、
         // ホバー対象イベントが切り替わったタイミングで明示的に閉じて再オープンする。
+        // IsOpen を false→true と同一ティックで切り替えると再オープンが無視され
+        // 前回の内容のまま表示され続けるため、Content を直接更新したうえで
+        // 再オープンを 1 ディスパッチサイクル遅延させる。
         TimeDropCanvas.PreviewMouseMove += (_, e) =>
         {
             var ev = FindOutlookTimedEventAt(e.GetPosition(TimeDropCanvas));
             if (ReferenceEquals(ev, _lastTimedTooltipEvent)) return;
             _lastTimedTooltipEvent = ev;
             timedTip.IsOpen = false;
-            if (ev != null) timedTip.IsOpen = true;
+            if (ev == null) return;
+            timedTip.Content = BuildOutlookEventToolTipPanel(ev);
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (ReferenceEquals(_lastTimedTooltipEvent, ev)) timedTip.IsOpen = true;
+            }), System.Windows.Threading.DispatcherPriority.Input);
         };
         TimeDropCanvas.MouseLeave += (_, _) =>
         {
@@ -876,7 +884,12 @@ public partial class WeekGridControl : WpfUserControl
             if (ReferenceEquals(ev, _lastAllDayTooltipEvent)) return;
             _lastAllDayTooltipEvent = ev;
             allDayTip.IsOpen = false;
-            if (ev != null) allDayTip.IsOpen = true;
+            if (ev == null) return;
+            allDayTip.Content = BuildOutlookEventToolTipPanel(ev);
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (ReferenceEquals(_lastAllDayTooltipEvent, ev)) allDayTip.IsOpen = true;
+            }), System.Windows.Threading.DispatcherPriority.Input);
         };
         AllDayCanvas.MouseLeave += (_, _) =>
         {
