@@ -45,6 +45,45 @@ public class LlmClientService
         provider.Equals("codex_cli",      StringComparison.OrdinalIgnoreCase) ||
         provider.Equals("github_copilot", StringComparison.OrdinalIgnoreCase);
 
+    public static bool SupportsNativeToolCalling(string provider) =>
+        provider.Equals("openai", StringComparison.OrdinalIgnoreCase) ||
+        provider.Equals("azure_openai", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// OpenAI compatible providers に native function calling を依頼する。
+    /// CLI providers continue to use the prompt JSON protocol.
+    /// </summary>
+    public async Task<NativeAgentCompletion> ChatWithToolsAsync(
+        string systemPrompt,
+        IReadOnlyList<NativeAgentMessage> messages,
+        IReadOnlyList<AgentToolDescriptor> tools,
+        CancellationToken ct = default,
+        bool allowTools = true)
+    {
+        var settings = _configService.LoadSettings();
+        if (!SupportsNativeToolCalling(settings.LlmProvider))
+            throw new InvalidOperationException("Native function calling is only available for OpenAI and Azure OpenAI providers.");
+        if (string.IsNullOrWhiteSpace(settings.LlmApiKey))
+            throw new InvalidOperationException("LLM API key is not configured. Please set it in Settings > LLM API.");
+
+        var effectiveSystemPrompt = systemPrompt;
+        if (!string.IsNullOrWhiteSpace(settings.LlmUserProfile))
+            effectiveSystemPrompt = $"## User Profile\n{settings.LlmUserProfile.Trim()}\n\n{systemPrompt}";
+
+        var result = await SendWithToolsAsync(
+            settings,
+            effectiveSystemPrompt,
+            messages,
+            tools,
+            settings.LlmProvider.Equals("azure_openai", StringComparison.OrdinalIgnoreCase),
+            allowTools,
+            ct);
+        LastSystemPrompt = effectiveSystemPrompt;
+        LastUserPrompt = messages.LastOrDefault(message => message.Role == "user")?.Content ?? "";
+        LastResponse = result.Content ?? JsonSerializer.Serialize(result.ToolCalls);
+        return result;
+    }
+
     /// <summary>マルチターン (会話履歴付き)</summary>
     public async Task<string> ChatWithHistoryAsync(
         string systemPrompt,
@@ -351,6 +390,144 @@ public class LlmClientService
         }
 
         return ExtractContent(json);
+    }
+
+    private async Task<NativeAgentCompletion> SendWithToolsAsync(
+        AppSettings settings,
+        string systemPrompt,
+        IReadOnlyList<NativeAgentMessage> messages,
+        IReadOnlyList<AgentToolDescriptor> tools,
+        bool isAzure,
+        bool allowTools,
+        CancellationToken ct)
+    {
+        var url = GetChatCompletionsUrl(settings, isAzure);
+        var allMessages = new JsonArray
+        {
+            new JsonObject { ["role"] = "system", ["content"] = systemPrompt }
+        };
+        foreach (var message in messages)
+            allMessages.Add(BuildNativeMessage(message));
+
+        var nativeTools = new JsonArray();
+        foreach (var descriptor in tools)
+            nativeTools.Add(new JsonObject
+            {
+                ["type"] = "function",
+                ["function"] = new JsonObject
+                {
+                    ["name"] = descriptor.Name,
+                    ["description"] = descriptor.Description,
+                    ["parameters"] = ParseToolParameters(descriptor.ParametersSchema)
+                }
+            });
+
+        var payload = new JsonObject
+        {
+            ["messages"] = allMessages,
+            ["tools"] = nativeTools,
+            ["tool_choice"] = allowTools ? "auto" : "none"
+        };
+        if (!isAzure)
+            payload["model"] = string.IsNullOrWhiteSpace(settings.LlmModel) ? "gpt-4o" : settings.LlmModel;
+        foreach (var (key, rawValue) in settings.LlmParameters)
+            payload[key] = JsonSerializer.SerializeToNode(ParseParamValue(rawValue));
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, url);
+        if (isAzure) request.Headers.Add("api-key", settings.LlmApiKey);
+        else request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.LlmApiKey);
+        request.Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
+
+        using var response = await _http.SendAsync(request, ct);
+        var json = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var provider = isAzure ? "Azure OpenAI" : "OpenAI";
+            throw new HttpRequestException($"{provider} API error {(int)response.StatusCode}: {json}");
+        }
+        return ExtractNativeCompletion(json);
+    }
+
+    private static string GetChatCompletionsUrl(AppSettings settings, bool isAzure)
+    {
+        if (!isAzure) return "https://api.openai.com/v1/chat/completions";
+        if (string.IsNullOrWhiteSpace(settings.LlmEndpoint))
+            throw new InvalidOperationException("Azure OpenAI endpoint is not configured. Please set LlmEndpoint in Settings.");
+        var endpoint = settings.LlmEndpoint.TrimEnd('/');
+        var model = string.IsNullOrWhiteSpace(settings.LlmModel) ? "gpt-4o" : settings.LlmModel;
+        var apiVersion = string.IsNullOrWhiteSpace(settings.LlmApiVersion) ? "2024-12-01-preview" : settings.LlmApiVersion;
+        return $"{endpoint}/openai/deployments/{model}/chat/completions?api-version={apiVersion}";
+    }
+
+    private static JsonObject BuildNativeMessage(NativeAgentMessage message)
+    {
+        var node = new JsonObject { ["role"] = message.Role };
+        if (message.Content != null) node["content"] = message.Content;
+        if (!string.IsNullOrWhiteSpace(message.ToolCallId)) node["tool_call_id"] = message.ToolCallId;
+        if (message.ToolCalls.Count > 0)
+        {
+            var calls = new JsonArray();
+            foreach (var call in message.ToolCalls)
+                calls.Add(new JsonObject
+                {
+                    ["id"] = call.Id,
+                    ["type"] = "function",
+                    ["function"] = new JsonObject { ["name"] = call.Name, ["arguments"] = call.Arguments.ToJsonString() }
+                });
+            node["tool_calls"] = calls;
+        }
+        return node;
+    }
+
+    private static JsonObject ParseToolParameters(string schema)
+    {
+        try
+        {
+            if (JsonNode.Parse(schema) is not JsonObject parsed) throw new JsonException();
+            if (parsed.ContainsKey("type")) return parsed;
+
+            // Existing descriptors use a concise argument-description object.
+            // Convert it into the strict JSON Schema shape expected by the API.
+            var properties = new JsonObject();
+            var required = new JsonArray();
+            foreach (var (name, descriptionNode) in parsed)
+            {
+                var description = descriptionNode?.GetValue<string>() ?? "";
+                var type = name.Equals("minutes", StringComparison.OrdinalIgnoreCase) ? "integer" : "string";
+                properties[name] = new JsonObject { ["type"] = type, ["description"] = description };
+                if (description.Contains("required", StringComparison.OrdinalIgnoreCase)) required.Add(name);
+            }
+            var normalized = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["additionalProperties"] = false
+            };
+            if (required.Count > 0) normalized["required"] = required;
+            return normalized;
+        }
+        catch (JsonException) { }
+        return new JsonObject { ["type"] = "object", ["additionalProperties"] = true };
+    }
+
+    private static NativeAgentCompletion ExtractNativeCompletion(string json)
+    {
+        var message = JsonNode.Parse(json)?["choices"]?[0]?["message"] as JsonObject
+            ?? throw new InvalidOperationException("Failed to parse native tool completion.");
+        var result = new NativeAgentCompletion { Content = message["content"]?.GetValue<string>() };
+        if (message["tool_calls"] is not JsonArray calls) return result;
+        foreach (var item in calls.OfType<JsonObject>())
+        {
+            var function = item["function"] as JsonObject;
+            var name = function?["name"]?.GetValue<string>();
+            var id = item["id"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(id)) continue;
+            JsonObject arguments;
+            try { arguments = JsonNode.Parse(function?["arguments"]?.GetValue<string>() ?? "{}") as JsonObject ?? new JsonObject(); }
+            catch (JsonException) { arguments = new JsonObject(); }
+            result.ToolCalls.Add(new NativeAgentToolCall { Id = id, Name = name, Arguments = arguments });
+        }
+        return result;
     }
 
     private static object ParseParamValue(string value)

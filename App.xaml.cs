@@ -153,6 +153,9 @@ public partial class App : WpfApplication
         services.AddSingleton<ICuriaAgentTool, AppendToFileTool>();
         services.AddSingleton<ICuriaAgentTool, SyncAsanaTool>();
         services.AddSingleton<ICuriaAgentTool, GenerateStandupTool>();
+        services.AddSingleton<ICuriaAgentTool, UpdateCurrentFocusTool>();
+        services.AddSingleton<ICuriaAgentTool, AppendDecisionLogTool>();
+        services.AddSingleton<ICuriaAgentTool, CompleteTaskTool>();
         services.AddSingleton<ICuriaAgentTool, OpenInEditorTool>();
         services.AddSingleton<ICuriaAgentTool, OpenInTimelineTool>();
         services.AddSingleton<ICuriaAgentTool, NavigateToPageTool>();

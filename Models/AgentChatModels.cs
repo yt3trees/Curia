@@ -27,6 +27,28 @@ public class AgentToolResult
     public string? DisplaySummary { get; set; }
 }
 
+/// <summary>OpenAI/Azure OpenAI の native function call をプロバイダー非依存で表す。</summary>
+public class NativeAgentToolCall
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public JsonObject Arguments { get; set; } = new();
+}
+
+public class NativeAgentMessage
+{
+    public string Role { get; set; } = "user";
+    public string? Content { get; set; }
+    public string? ToolCallId { get; set; }
+    public List<NativeAgentToolCall> ToolCalls { get; set; } = [];
+}
+
+public class NativeAgentCompletion
+{
+    public string? Content { get; set; }
+    public List<NativeAgentToolCall> ToolCalls { get; set; } = [];
+}
+
 public enum AgentMessageKind { User, Assistant, ToolCall, ToolResult, Approval, Error }
 
 public class AgentChatMessage

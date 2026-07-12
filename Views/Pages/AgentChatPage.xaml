@@ -19,10 +19,11 @@
         <Grid Grid.Row="0" Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Agent Chat" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource AppText}"/>
-                <TextBlock Text="Read-only project assistant" FontSize="11" Margin="12,6,0,0" Foreground="{DynamicResource AppSubtext0}"/>
+                <TextBlock Text="Project assistant" FontSize="11" Margin="12,6,0,0" Foreground="{DynamicResource AppSubtext0}"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <ui:Button Content="Tools" Command="{Binding ToggleToolsPanelCommand}" Padding="10,4" Appearance="Secondary" Margin="0,0,8,0"/>
+                <ui:Button Content="History" Command="{Binding ToggleHistoryPanelCommand}" Padding="10,4" Appearance="Secondary" Margin="0,0,8,0"/>
                 <ui:Button Content="New Session" Command="{Binding NewSessionCommand}" Padding="10,4" Appearance="Secondary"/>
             </StackPanel>
         </Grid>
@@ -43,7 +44,7 @@
                                 </Border.Style>
                                 <StackPanel>
                                     <TextBlock Text="{Binding Kind}" FontSize="10" Foreground="{DynamicResource AppSubtext0}" Margin="0,0,0,3"/>
-                                    <TextBox Text="{Binding DisplayText}" IsReadOnly="True" IsTabStop="False"
+                                    <TextBox Text="{Binding DisplayText, Mode=OneWay}" IsReadOnly="True" IsTabStop="False"
                                              TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Padding="0"
                                              Background="Transparent" Foreground="{DynamicResource AppText}"
                                              CaretBrush="{DynamicResource AppText}">
@@ -59,7 +60,7 @@
                                                             Visibility="{Binding IsAssistant, Converter={StaticResource BoolToVis}}"/>
                                     <Border Background="{DynamicResource AppSurface1}" CornerRadius="3" Padding="7,5" Margin="0,6,0,0"
                                             Visibility="{Binding IsToolCall, Converter={StaticResource BoolToVis}}">
-                                        <TextBox Text="{Binding ToolArgumentsDisplay}" IsReadOnly="True" IsTabStop="False"
+                                        <TextBox Text="{Binding ToolArgumentsDisplay, Mode=OneWay}" IsReadOnly="True" IsTabStop="False"
                                                  TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Padding="0"
                                                  Background="Transparent" Foreground="{DynamicResource AppSubtext0}"
                                                  CaretBrush="{DynamicResource AppText}" FontFamily="Consolas, Courier New" FontSize="11"/>
@@ -74,7 +75,7 @@
                                     </StackPanel>
                                     <Border Background="{DynamicResource AppSurface1}" CornerRadius="3" Padding="7,5" Margin="0,6,0,0"
                                             Visibility="{Binding IsToolResult, Converter={StaticResource BoolToVis}}">
-                                        <TextBox Text="{Binding ToolResultContent}" IsReadOnly="True" IsTabStop="False"
+                                        <TextBox Text="{Binding ToolResultContent, Mode=OneWay}" IsReadOnly="True" IsTabStop="False"
                                                  TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Padding="0"
                                                  Background="Transparent" Foreground="{DynamicResource AppSubtext0}"
                                                  CaretBrush="{DynamicResource AppText}" FontFamily="Consolas, Courier New" FontSize="11"/>
@@ -111,10 +112,38 @@
                         </ScrollViewer>
                     </Grid>
                 </Border>
+                <Border Width="380" HorizontalAlignment="Right" VerticalAlignment="Top" Panel.ZIndex="2"
+                        Background="{DynamicResource AppSurface0}" BorderBrush="{DynamicResource AppSurface2}" BorderThickness="1" CornerRadius="6"
+                        Visibility="{Binding IsHistoryPanelVisible, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <TextBlock Text="Chat history" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource AppText}" Margin="12,12,12,8"/>
+                        <ScrollViewer Grid.Row="1" MaxHeight="480" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding Sessions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{DynamicResource AppSurface1}" CornerRadius="4" Padding="8" Margin="12,0,12,6">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <Button Content="{Binding DisplayLabel}" Command="{Binding DataContext.LoadSessionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                                        HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource AppText}" Padding="0"/>
+                                                <ui:Button Grid.Column="1" Content="Delete" Command="{Binding DataContext.DeleteSessionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                                           Padding="7,2" Appearance="Secondary" Margin="8,0,0,0"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
             </Grid>
         </Border>
         <StackPanel Grid.Row="2" Margin="0,10,0,0">
             <TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="{DynamicResource AppSubtext0}" Margin="0,0,0,4"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <ui:Button Content="Morning preparation" Command="{Binding RunMorningPreparationCommand}" Padding="9,3" Appearance="Secondary"/>
+            </StackPanel>
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <TextBox Grid.Column="0" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}" Padding="8,6" Background="{DynamicResource AppSurface1}" Foreground="{DynamicResource AppText}" BorderBrush="{DynamicResource AppSurface2}" KeyDown="OnInputKeyDown" ToolTip="Press Ctrl+Enter to send"/>

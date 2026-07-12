@@ -375,6 +375,10 @@ public class TodayQueueService
     /// PS1: Invoke-TodayQueueCompleteAsanaTask 相当。
     /// </summary>
     public async Task<(bool Success, string Message)> CompleteAsanaTaskAsync(string taskGid)
+        => await SetAsanaTaskCompletedAsync(taskGid, true);
+
+    /// <summary>Asana タスクの完了状態を更新する。Agent の Undo 操作でも使用する。</summary>
+    public async Task<(bool Success, string Message)> SetAsanaTaskCompletedAsync(string taskGid, bool completed, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(taskGid))
             return (false, "Asana task GID が見つかりません。");
@@ -386,18 +390,20 @@ public class TodayQueueService
         try
         {
             var uri = $"https://app.asana.com/api/1.0/tasks/{taskGid}";
-            var body = JsonSerializer.Serialize(new { data = new { completed = true } });
+            var body = JsonSerializer.Serialize(new { data = new { completed } });
             var req = new HttpRequestMessage(HttpMethod.Put, uri)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
             };
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-            var resp = await _http.SendAsync(req);
+            var resp = await _http.SendAsync(req, ct);
             if (resp.IsSuccessStatusCode)
-                return (true, $"Asana タスクを完了にしました ({taskGid})");
+                return (true, completed
+                    ? $"Asana タスクを完了にしました ({taskGid})"
+                    : $"Asana タスクを未完了に戻しました ({taskGid})");
 
-            var err = await resp.Content.ReadAsStringAsync();
+            var err = await resp.Content.ReadAsStringAsync(ct);
             var snippet = err.Length > 200 ? err[..200] : err;
             return (false, $"Asana API エラー: {(int)resp.StatusCode} {snippet}");
         }

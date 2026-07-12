@@ -2,7 +2,7 @@
 
 ## 実装状況 (2026-07-12)
 
-Phase A と Phase B の基盤実装は完了している。ビルドおよび single-file publish は成功済み。
+Phase A / Phase B の基盤実装と、Phase C の主要機能は完了している。ビルドおよび single-file publish は成功済み。
 
 - Markdig.Wpf を導入し、アシスタント回答を Markdown として描画する。
 - 書き込みツールにはチャット内の Approve / Reject カードを表示する。同一ツールのセッション内自動承認も利用できる。
@@ -13,6 +13,10 @@ Phase A と Phase B の基盤実装は完了している。ビルドおよび si
 - `capture_note` は現在グローバル `capture_log.md` への追記であり、プロジェクト固有ファイルへのルーティングは未実装。
 - `get_schedule` は Curia の手動スケジュールブロックを返す。Outlook / ICS イベントの統合は未実装。
 - `search_wiki` は現状 Wiki タイトル検索として実装している。ページ本文を含む検索・WikiQueryService 連携は追加対応が必要。
+- Phase C: `update_current_focus` と `append_decision_log` は Agent ツールとして統合済み。通常の Approve / Reject に加え、既存の差分レビュー画面で最終 Apply / Skip を要求する。
+- Phase C: 履歴一覧、任意セッション再開、履歴削除、および固定プリセット "Morning preparation" を実装済み。
+- Phase C: `complete_task` は Asana の完了操作後に 15 分間有効な Undo token を返す。Undo token はアプリ内メモリのみで保持し、アプリ再起動後は利用できない。
+- Phase C: `openai` / `azure_openai` は native function calling (`tools` / `tool_calls`) を利用する。CLI プロバイダは既存のプロンプトベース JSON プロトコルを維持する。Compatibility Check はプロバイダに応じて native echo probe または JSON probe を実行する。
 
 チャット UI から自然文で指示すると、AI エージェントが Curia の各サービスを「ツール」として呼び出し、データ取得・操作を代行する機能。
 
@@ -59,9 +63,9 @@ AgentOrchestratorService  (エージェントループ)
 
 ## Phase 0: 設計上の論点と方針
 
-### D1. ツール呼び出しプロトコル: プロンプトベース JSON を採用
+### D1. ツール呼び出しプロトコル: プロバイダ別 transport を採用
 
-LlmClientService は現在テキスト完結のみ (ネイティブ function calling 非対応)。プロバイダに CLI 系 (claude_code / gemini_cli / codex_cli / github_copilot) が含まれ、これらは stdin/stdout のテキストしか扱えないため、全 6 プロバイダで動く共通方式としてプロンプトベースの JSON プロトコルを採用する。
+CLI 系プロバイダ (claude_code / gemini_cli / codex_cli / github_copilot) は stdin/stdout のテキストしか扱えないため、プロンプトベース JSON プロトコルを利用する。`openai` / `azure_openai` は native function calling を利用し、`tools` / `tool_calls` を transport 層で `AgentToolCall` に正規化する。
 
 - システムプロンプトにツール定義一覧 (名前 / 説明 / パラメータの JSON Schema 風記述) を埋め込む
 - LLM には必ず次のいずれかの JSON のみを返させる:
@@ -71,7 +75,7 @@ LlmClientService は現在テキスト完結のみ (ネイティブ function cal
 {"type": "final_answer", "text": "回答本文 (Markdown)"}
 ```
 
-将来 openai / azure_openai でネイティブ function calling に切り替える場合も、ツール定義 (ICuriaAgentTool) はそのまま流用できるよう、プロトコル変換層 (AgentProtocol) をオーケストレータ内に閉じ込める。
+ツール定義 (`ICuriaAgentTool`) は両経路で共通利用する。native 経路では `LlmClientService.ChatWithToolsAsync` が API ペイロードと応答を変換し、`AgentOrchestratorService` が承認・実行・tool result のループを共通処理する。
 
 ### D1-2. JSON 遵守率対策 (CLI プロバイダ、特に github_copilot)
 
@@ -408,13 +412,18 @@ Available tools:
 - セッション永続化
 - 旧 Ask Curia (`?` モード) の削除と AgentChatPage への導線置き換え (D6 の Step 2〜4)
 
-### Phase C: 発展
+### Phase C: 発展 (実装済み)
 
-- update_current_focus / append_decision_log の統合 (既存の ProposalReviewDialog フローとの接続)
-- セッション履歴の一覧・再開
-- openai / azure_openai のネイティブ function calling 対応 (プロトコル変換層の差し替え)
-- 定型エージェントタスクのプリセット (「朝の準備」= schedule + today_tasks + standup をまとめて実行)
-- Asana タスクの完了化 (承認 + Undo 付き)
+- [x] `update_current_focus` / `append_decision_log` を Agent ツールとして統合。Agent 承認後にも `ProposalReviewDialog` による最終レビューを要求する。
+- [x] セッション履歴の一覧・再開・削除。
+- [x] `openai` / `azure_openai` のネイティブ function calling。CLI プロバイダはプロンプトベース JSON を継続利用する。
+- [x] 固定プリセット "Morning preparation"。schedule / today tasks / standup を収集する指示を Agent Chat に送信する。
+- [x] Asana タスクの完了化。承認後に完了し、15 分間有効なアプリ内 Undo token で未完了に戻せる。
+
+制約:
+
+- Undo token は永続化しないため、アプリ再起動後は復元できない。
+- `append_decision_log` の Agent 経路はドラフトの生成・レビュー・保存まで対応する。`open_issues.md` の resolved tension 削除と添付ファイル指定は Editor の専用フローを利用する。
 
 ---
 

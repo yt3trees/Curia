@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Curia.Models;
 
@@ -102,6 +103,27 @@ public class FocusUpdateService
             DebugUserPrompt   = _llm.LastUserPrompt,
             DebugResponse     = _llm.LastResponse,
         };
+    }
+
+    /// <summary>レビュー済みの提案を適用し、当日の focus_history スナップショットを保存する。</summary>
+    public async Task ApplyProposalAsync(FocusUpdateResult result, string content, CancellationToken ct = default)
+    {
+        var finalContent = UpdateDateLine(content);
+        await _encoding.WriteFileAsync(result.TargetFocusPath, finalContent, "UTF8", ct);
+
+        var historyDirectory = Path.Combine(Path.GetDirectoryName(result.TargetFocusPath)!, "focus_history");
+        Directory.CreateDirectory(historyDirectory);
+        var snapshotPath = Path.Combine(historyDirectory, $"{DateTime.Now:yyyy-MM-dd}.md");
+        await _encoding.WriteFileAsync(snapshotPath, finalContent, "UTF8", ct);
+    }
+
+    private static string UpdateDateLine(string content)
+    {
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        var dateLine = new Regex(@"(?m)^(更新:\s*|Last Updated:\s*)\d{4}-\d{2}-\d{2}.*$");
+        return dateLine.IsMatch(content)
+            ? dateLine.Replace(content, match => match.Groups[1].Value + today, 1)
+            : content;
     }
 
     // -----------------------------------------------------------------------

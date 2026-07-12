@@ -16,6 +16,10 @@ For a completed request, return {"type":"final_answer","text":"ok"}.
 
     public async Task<bool> TestAsync(CancellationToken ct)
     {
+        var settings = _config.LoadSettings();
+        if (LlmClientService.SupportsNativeToolCalling(settings.LlmProvider))
+            return await TestNativeToolCallingAsync(ct);
+
         var first = await _llm.ChatCompletionAsync(TestSystemPrompt, "Call the echo tool with the value ok.", ct);
         if (!AgentProtocol.TryParse(first, out var call, out _) || call?.Tool != "echo") return SaveResult(false);
         var messages = new List<(string role, string content)>
@@ -26,6 +30,29 @@ For a completed request, return {"type":"final_answer","text":"ok"}.
         };
         var second = await _llm.ChatWithHistoryAsync(TestSystemPrompt, messages, ct);
         return SaveResult(AgentProtocol.TryParse(second, out _, out var answer) && answer != null);
+    }
+
+    private async Task<bool> TestNativeToolCallingAsync(CancellationToken ct)
+    {
+        var echo = new AgentToolDescriptor
+        {
+            Name = "echo",
+            Description = "Returns the supplied value.",
+            ParametersSchema = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\"}},\"required\":[\"value\"]}",
+            RiskLevel = ToolRiskLevel.ReadOnly
+        };
+        var messages = new List<NativeAgentMessage>
+        {
+            new() { Role = "user", Content = "Call the echo tool with the value ok." }
+        };
+        var first = await _llm.ChatWithToolsAsync("Use the echo tool when requested.", messages, [echo], ct);
+        var call = first.ToolCalls.FirstOrDefault(tool => tool.Name == "echo");
+        if (call == null) return SaveResult(false);
+        messages.Add(new NativeAgentMessage { Role = "assistant", Content = first.Content, ToolCalls = first.ToolCalls });
+        messages.Add(new NativeAgentMessage { Role = "tool", ToolCallId = call.Id, Content = "ok" });
+        messages.Add(new NativeAgentMessage { Role = "user", Content = "Give the completed answer." });
+        var second = await _llm.ChatWithToolsAsync("Use the echo tool when requested.", messages, [echo], ct, allowTools: false);
+        return SaveResult(second.ToolCalls.Count == 0 && !string.IsNullOrWhiteSpace(second.Content));
     }
 
     private bool SaveResult(bool passed)

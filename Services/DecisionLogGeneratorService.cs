@@ -381,6 +381,38 @@ public class DecisionLogGeneratorService
         return refined.Trim();
     }
 
+    /// <summary>レビュー済みのドラフトを対象プロジェクトの decision_log に保存する。</summary>
+    public async Task<string> SaveDraftAsync(
+        ProjectInfo project,
+        string? workstreamId,
+        DecisionLogDraftResult draft,
+        string? content = null,
+        string? fileName = null,
+        CancellationToken ct = default)
+    {
+        var logDirectory = ResolveDecisionLogDir(project, workstreamId);
+        Directory.CreateDirectory(logDirectory);
+        var topic = SanitizeSnakeCase((fileName ?? draft.SuggestedFileName).Trim());
+        if (string.IsNullOrWhiteSpace(topic)) topic = "decision";
+        var path = GetUniqueDecisionLogPath(logDirectory, $"{DateTime.Now:yyyy-MM-dd}_{topic}.md");
+        await _encoding.WriteFileAsync(path, content ?? draft.DraftContent, "UTF8", ct);
+        return path;
+    }
+
+    private static string GetUniqueDecisionLogPath(string directory, string baseFileName)
+    {
+        var path = Path.Combine(directory, baseFileName);
+        if (!File.Exists(path)) return path;
+        var name = Path.GetFileNameWithoutExtension(baseFileName);
+        var extension = Path.GetExtension(baseFileName);
+        foreach (var suffix in "abcdefghijklmnopqrstuvwxyz")
+        {
+            var candidate = Path.Combine(directory, $"{name}_{suffix}{extension}");
+            if (!File.Exists(candidate)) return candidate;
+        }
+        return Path.Combine(directory, $"{name}_{DateTime.Now:HHmmss}{extension}");
+    }
+
     // -----------------------------------------------------------------------
     // パス解決ヘルパー
     // -----------------------------------------------------------------------

@@ -25,12 +25,49 @@ public class AgentChatHistoryService
             .FirstOrDefault();
         if (latest == null) return [];
 
+        return await LoadSessionAsync(latest.FullName, ct);
+    }
+
+    public async Task<List<AgentChatSessionSummary>> ListSessionsAsync(CancellationToken ct = default)
+    {
+        if (!Directory.Exists(HistoryDirectory)) return [];
+
+        var summaries = new List<AgentChatSessionSummary>();
+        foreach (var file in new DirectoryInfo(HistoryDirectory).GetFiles("*.json")
+                     .OrderByDescending(item => item.LastWriteTimeUtc))
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                await using var stream = File.OpenRead(file.FullName);
+                var session = await JsonSerializer.DeserializeAsync<AgentChatHistorySession>(stream, cancellationToken: ct);
+                if (session == null) continue;
+                var firstUserMessage = session.Messages.FirstOrDefault(message => message.Kind == AgentMessageKind.User)?.Text ?? "New chat";
+                summaries.Add(new AgentChatSessionSummary
+                {
+                    Path = file.FullName,
+                    CreatedAt = session.CreatedAt,
+                    UpdatedAt = session.UpdatedAt,
+                    MessageCount = session.Messages.Count,
+                    Title = firstUserMessage.Length <= 72 ? firstUserMessage : firstUserMessage[..72] + "..."
+                });
+            }
+            catch (JsonException) { }
+            catch (IOException) { }
+        }
+        return summaries;
+    }
+
+    public async Task<List<AgentChatMessage>> LoadSessionAsync(string sessionPath, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionPath) || !File.Exists(sessionPath)) return [];
+
         try
         {
-            await using var stream = File.OpenRead(latest.FullName);
+            await using var stream = File.OpenRead(sessionPath);
             var session = await JsonSerializer.DeserializeAsync<AgentChatHistorySession>(stream, cancellationToken: ct);
             if (session == null) return [];
-            _currentSessionPath = latest.FullName;
+            _currentSessionPath = sessionPath;
             return session.Messages.Select(entry => new AgentChatMessage
             {
                 Kind = entry.Kind,
@@ -47,6 +84,15 @@ public class AgentChatHistoryService
         {
             return [];
         }
+    }
+
+    public Task DeleteSessionAsync(string sessionPath)
+    {
+        if (string.IsNullOrWhiteSpace(sessionPath) || !File.Exists(sessionPath)) return Task.CompletedTask;
+        File.Delete(sessionPath);
+        if (string.Equals(_currentSessionPath, sessionPath, StringComparison.OrdinalIgnoreCase))
+            _currentSessionPath = null;
+        return Task.CompletedTask;
     }
 
     public void StartNewSession() => _currentSessionPath = null;

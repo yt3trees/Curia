@@ -3,6 +3,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Curia.ViewModels;
 using Curia.Services.Agent;
+using Curia.Models;
+using Curia.Views;
 using Wpf.Ui.Controls;
 using WpfUserControl = System.Windows.Controls.UserControl;
 
@@ -38,6 +40,29 @@ public partial class AgentChatPage : WpfUserControl, INavigableView<AgentChatVie
                 "editor" => typeof(EditorPage), "timeline" => typeof(TimelinePage), _ => typeof(SettingsPage)
             });
         });
+        _uiActions.ReviewFocusUpdateAsync = async (result, refine) => await Dispatcher.InvokeAsync(async () =>
+        {
+            var owner = System.Windows.Window.GetWindow(this);
+            if (owner == null) return (false, (string?)null);
+            return await ProposalReviewDialog.ShowAsync(
+                owner,
+                result,
+                "Review Focus Update",
+                extraInfo: result.Summary,
+                refineFunc: refine);
+        }).Task.Unwrap();
+        _uiActions.ReviewDecisionLogAsync = async (proposal, refine) => await Dispatcher.InvokeAsync(async () =>
+        {
+            var owner = System.Windows.Window.GetWindow(this);
+            if (owner == null) return (false, (string?)null);
+            return await ProposalReviewDialog.ShowAsync(
+                owner,
+                proposal,
+                "Review Decision Log",
+                titleIcon: "D",
+                extraInfo: proposal.Summary,
+                refineFunc: refine);
+        }).Task.Unwrap();
     }
 
     private void OnInputKeyDown(object sender, System.Windows.Input.KeyEventArgs e)

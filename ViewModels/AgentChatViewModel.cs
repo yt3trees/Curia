@@ -22,6 +22,7 @@ public partial class AgentChatViewModel : ObservableObject
     private bool _historyLoaded;
 
     public ObservableCollection<AgentChatMessage> Messages { get; } = [];
+    public ObservableCollection<AgentChatSessionSummary> Sessions { get; } = [];
     public IReadOnlyList<AgentToolDescriptor> Tools { get; }
 
     [ObservableProperty] private string inputText = "";
@@ -29,6 +30,8 @@ public partial class AgentChatViewModel : ObservableObject
     [ObservableProperty] private bool isAiEnabled;
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private bool isToolsPanelVisible;
+    [ObservableProperty] private bool isHistoryPanelVisible;
+    [ObservableProperty] private AgentChatSessionSummary? selectedSession;
     [ObservableProperty] private AgentChatMessage? pendingApproval;
 
     public bool CanUseAgent
@@ -69,6 +72,7 @@ public partial class AgentChatViewModel : ObservableObject
         var messages = await _historyService.LoadLatestSessionAsync();
         foreach (var message in messages) Messages.Add(message);
         if (messages.Count > 0) StatusMessage = "Restored the most recent chat session.";
+        await RefreshSessionsAsync();
         RefreshAvailability();
     }
 
@@ -137,10 +141,50 @@ public partial class AgentChatViewModel : ObservableObject
         PendingApproval = null;
         _historyService.StartNewSession();
         StatusMessage = "";
+        SelectedSession = null;
     }
 
     [RelayCommand]
     private void ToggleToolsPanel() => IsToolsPanelVisible = !IsToolsPanelVisible;
+
+    [RelayCommand]
+    private async Task ToggleHistoryPanelAsync()
+    {
+        IsHistoryPanelVisible = !IsHistoryPanelVisible;
+        if (IsHistoryPanelVisible) await RefreshSessionsAsync();
+    }
+
+    [RelayCommand]
+    private async Task LoadSessionAsync(AgentChatSessionSummary? session)
+    {
+        if (session == null || IsRunning) return;
+        var messages = await _historyService.LoadSessionAsync(session.Path);
+        Messages.Clear();
+        foreach (var message in messages) Messages.Add(message);
+        SelectedSession = session;
+        IsHistoryPanelVisible = false;
+        StatusMessage = $"Restored chat from {session.UpdatedAt:g}.";
+    }
+
+    [RelayCommand]
+    private async Task DeleteSessionAsync(AgentChatSessionSummary? session)
+    {
+        if (session == null || IsRunning) return;
+        await _historyService.DeleteSessionAsync(session.Path);
+        if (SelectedSession == session) SelectedSession = null;
+        await RefreshSessionsAsync();
+    }
+
+    [RelayCommand]
+    private async Task RunMorningPreparationAsync()
+        => await SubmitAsync("Prepare my morning briefing. Check today's schedule, my today task queue, and the latest standup. Summarize the priorities and any conflicts.");
+
+    private async Task RefreshSessionsAsync()
+    {
+        var sessions = await _historyService.ListSessionsAsync();
+        Sessions.Clear();
+        foreach (var session in sessions) Sessions.Add(session);
+    }
 
     private void AddProgressMessage(AgentChatMessage message)
     {
