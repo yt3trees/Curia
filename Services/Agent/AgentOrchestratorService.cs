@@ -185,7 +185,7 @@ public class AgentOrchestratorService
             nativeToolCalling ? "- Never invent tool results or project facts." : "- To call a tool: {\"type\":\"tool_call\",\"tool\":\"<name>\",\"arguments\":{},\"reason\":\"<short>\"}",
             nativeToolCalling ? "- Write tools require user approval before they run." : "- To answer: {\"type\":\"final_answer\",\"text\":\"<markdown>\"}",
             "- Gather facts with tools before answering. Do not guess project data.",
-            "- Use ask_knowledge_base for open-ended decision or knowledge questions.",
+            "- Use ask_knowledge_base for open-ended decision or knowledge questions, including questions about managed Wiki pages.",
             $"- Respond in {settings.LlmLanguage}.",
             "",
             nativeToolCalling ? "Use native tool calls rather than embedding JSON tool requests in text." : "Example tool call: {\"type\":\"tool_call\",\"tool\":\"get_today_tasks\",\"arguments\":{\"bucket\":\"today\"},\"reason\":\"Check today's tasks\"}",

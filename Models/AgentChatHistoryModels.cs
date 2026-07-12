@@ -24,5 +24,6 @@ public class AgentChatHistoryEntry
     public AgentMessageKind Kind { get; set; }
     public string Text { get; set; } = "";
     public AgentToolCall? ToolCall { get; set; }
+    public string ToolResultContent { get; set; } = "";
     public DateTime Timestamp { get; set; }
 }

@@ -9,6 +9,18 @@
              Loaded="OnLoaded">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <Style x:Key="{x:Static markdig:Styles.CodeStyleKey}" TargetType="{x:Type Run}">
+            <Setter Property="Foreground" Value="{DynamicResource AppText}"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurface2}"/>
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Courier New"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+        <Style x:Key="{x:Static markdig:Styles.CodeBlockStyleKey}" TargetType="{x:Type Paragraph}">
+            <Setter Property="Foreground" Value="{DynamicResource AppText}"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurface2}"/>
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Courier New"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
     </UserControl.Resources>
     <Grid Margin="18,12,18,42">
         <Grid.RowDefinitions>
@@ -29,7 +41,8 @@
         </Grid>
         <Border Grid.Row="1" Background="{DynamicResource AppSurface0}" BorderBrush="{DynamicResource AppSurface2}" BorderThickness="1" CornerRadius="6" Padding="12">
             <Grid>
-                <ScrollViewer x:Name="MessageScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="MessageScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                              PreviewMouseWheel="OnMessageScrollPreviewMouseWheel">
                     <ItemsControl ItemsSource="{Binding Messages}">
                         <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -56,7 +69,9 @@
                                             </Style>
                                         </TextBox.Style>
                                     </TextBox>
-                                    <markdig:MarkdownViewer Markdown="{Binding Text}" Foreground="{DynamicResource AppText}" Background="Transparent"
+                                    <markdig:MarkdownViewer Markdown="{Binding Text, NotifyOnTargetUpdated=True}" Foreground="{DynamicResource AppText}" Background="Transparent"
+                                                            FontFamily="Segoe UI, Yu Gothic UI, Meiryo UI, Arial" FontSize="14"
+                                                            Loaded="OnMarkdownViewerLoaded" DataContextChanged="OnMarkdownViewerDataContextChanged" TargetUpdated="OnMarkdownViewerTargetUpdated"
                                                             Visibility="{Binding IsAssistant, Converter={StaticResource BoolToVis}}"/>
                                     <Border Background="{DynamicResource AppSurface1}" CornerRadius="3" Padding="7,5" Margin="0,6,0,0"
                                             Visibility="{Binding IsToolCall, Converter={StaticResource BoolToVis}}">
@@ -146,7 +161,10 @@
             </StackPanel>
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBox Grid.Column="0" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}" Padding="8,6" Background="{DynamicResource AppSurface1}" Foreground="{DynamicResource AppText}" BorderBrush="{DynamicResource AppSurface2}" KeyDown="OnInputKeyDown" ToolTip="Press Ctrl+Enter to send"/>
+                <TextBox Grid.Column="0" Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}"
+                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="34" MaxHeight="282"
+                         VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                         Padding="8,6" Background="{DynamicResource AppSurface1}" Foreground="{DynamicResource AppText}" BorderBrush="{DynamicResource AppSurface2}" KeyDown="OnInputKeyDown" ToolTip="Press Ctrl+Enter to send"/>
                 <ui:Button Grid.Column="1" Content="Send" Command="{Binding SendCommand}" IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}}" Margin="8,0,0,0" Padding="16,6"/>
                 <ui:Button Grid.Column="2" Content="Stop" Command="{Binding CancelCommand}" Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}" Margin="8,0,0,0" Padding="16,6" Appearance="Secondary"/>
             </Grid>

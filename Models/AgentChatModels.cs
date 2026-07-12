@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.Json;
+using System.Text.Encodings.Web;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Curia.Models;
@@ -54,6 +55,12 @@ public enum AgentMessageKind { User, Assistant, ToolCall, ToolResult, Approval, 
 
 public partial class AgentChatMessage : ObservableObject
 {
+    private static readonly JsonSerializerOptions ToolArgumentsDisplayOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     public AgentMessageKind Kind { get; set; }
     [ObservableProperty] private string text = "";
     public AgentToolCall? ToolCall { get; set; }
@@ -70,7 +77,7 @@ public partial class AgentChatMessage : ObservableObject
     public bool IsApproval => Kind == AgentMessageKind.Approval;
     public bool IsApprovalPending => IsApproval && !IsApprovalResolved;
     public string DisplayText => ToolCall == null ? Text : $"{ToolCall.Tool}: {Text}";
-    public string ToolArgumentsDisplay => ToolCall?.Arguments.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
+    public string ToolArgumentsDisplay => ToolCall?.Arguments.ToJsonString(ToolArgumentsDisplayOptions) ?? "";
 
     partial void OnIsApprovalResolvedChanged(bool value) => OnPropertyChanged(nameof(IsApprovalPending));
 }

@@ -6,7 +6,7 @@ Phase A / Phase B の基盤実装と、Phase C の主要機能は完了してい
 
 - Markdig.Wpf を導入し、アシスタント回答を Markdown として描画する。
 - 書き込みツールにはチャット内の Approve / Reject カードを表示する。同一ツールのセッション内自動承認も利用できる。
-- セッションは `%CONFIG%/agent_chat_history/` へ保存する。User / Assistant / ToolCall のみを保存し、ToolResult 全文は保存しない。
+- セッションは `%CONFIG%/agent_chat_history/` へ保存する。User / Assistant / ToolCall / ToolResult を保存し、履歴を開いたときにもツール結果を確認できる。
 - Agent Chat を開くと最新セッションを自動復元する。仕様上の「起動時は新規セッション」とは異なる現行動作であり、履歴一覧・任意セッション再開は Phase C で扱う。
 - Command Palette の `?` 入力は Agent Chat へ遷移して自動送信する。旧 Ask Curia の表示経路は利用しないが、旧 UI 関連コードの物理削除と `CuriaQueryService` の UI 専用 API 整理は未完了。
 - パスガードは管理ルート、`..`、ルート境界を検証する。junction / symbolic link の実体解決による逸脱検出は追加対応が必要。

@@ -73,6 +73,7 @@ public class AgentChatHistoryService
                 Kind = entry.Kind,
                 Text = entry.Text,
                 ToolCall = entry.ToolCall,
+                ToolResultContent = entry.ToolResultContent,
                 Timestamp = entry.Timestamp
             }).ToList();
         }
@@ -105,12 +106,13 @@ public class AgentChatHistoryService
             Directory.CreateDirectory(HistoryDirectory);
             _currentSessionPath ??= CreateSessionPath();
             var persisted = messages
-                .Where(message => message.Kind is AgentMessageKind.User or AgentMessageKind.Assistant or AgentMessageKind.ToolCall)
+                .Where(message => message.Kind is AgentMessageKind.User or AgentMessageKind.Assistant or AgentMessageKind.ToolCall or AgentMessageKind.ToolResult)
                 .Select(message => new AgentChatHistoryEntry
                 {
                     Kind = message.Kind,
                     Text = message.Text,
                     ToolCall = message.ToolCall,
+                    ToolResultContent = message.ToolResultContent,
                     Timestamp = message.Timestamp
                 }).ToList();
             var session = new AgentChatHistorySession

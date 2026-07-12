@@ -123,6 +123,7 @@ public partial class App : WpfApplication
         services.AddSingleton<ICuriaSourceAdapter, FocusHistorySourceAdapter>();
         services.AddSingleton<ICuriaSourceAdapter, MeetingNotesSourceAdapter>();
         services.AddSingleton<ICuriaSourceAdapter, TasksSourceAdapter>();
+        services.AddSingleton<ICuriaSourceAdapter, WikiSourceAdapter>();
         services.AddSingleton<CuriaQueryService>();
         services.AddSingleton<ScheduleService>();
         services.AddSingleton<ScheduleNotificationService>();
