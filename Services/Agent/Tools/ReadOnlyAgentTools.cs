@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Encodings.Web;
 using System.Text.Json.Nodes;
 using Curia.Models;
 
@@ -7,6 +8,12 @@ namespace Curia.Services.Agent.Tools;
 
 internal static class AgentToolArguments
 {
+    private static readonly JsonSerializerOptions JsonDisplayOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     public static string String(JsonObject arguments, string name) => arguments[name]?.GetValue<string>()?.Trim() ?? "";
 
     public static ProjectInfo? ResolveProject(IEnumerable<ProjectInfo> projects, string requested, out string? error)
@@ -23,7 +30,7 @@ internal static class AgentToolArguments
     public static AgentToolResult JsonResult(object value, string summary) => new()
     {
         Success = true,
-        Content = JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }),
+        Content = JsonSerializer.Serialize(value, JsonDisplayOptions),
         DisplaySummary = summary
     };
 }
