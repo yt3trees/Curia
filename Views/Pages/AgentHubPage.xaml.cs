@@ -38,15 +38,23 @@ public partial class AgentHubPage : WpfUserControl, INavigableView<AgentHubViewM
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_isInitialized) return;
-        _isInitialized = true;
+        if (!_isInitialized)
+        {
+            _isInitialized = true;
+            var appRes = Application.Current.Resources;
+            _tabActiveBrush = appRes.Contains("AppSurface2") ? (System.Windows.Media.Brush)appRes["AppSurface2"] : System.Windows.Media.Brushes.Gray;
+            _tabInactiveBrush = System.Windows.Media.Brushes.Transparent;
+            UpdateTabButtonStyles();
+        }
 
-        var appRes = Application.Current.Resources;
-        _tabActiveBrush = appRes.Contains("AppSurface2") ? (System.Windows.Media.Brush)appRes["AppSurface2"] : System.Windows.Media.Brushes.Gray;
-        _tabInactiveBrush = System.Windows.Media.Brushes.Transparent;
-        UpdateTabButtonStyles();
-
-        await ViewModel.InitializeAsync();
+        try
+        {
+            await ViewModel.EnsureInitializedAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[AgentHubPage] Initialization failed: {ex}");
+        }
     }
 
     // ─── Tab switching ────────────────────────────────────────────────────

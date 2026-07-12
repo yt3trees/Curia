@@ -303,15 +303,11 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
         AutoRefreshComboBox.SelectedIndex = 0; // Off
     }
 
-    private bool _isInitialized = false;
     private static DateTime? _planMyDayShownToday;
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_isInitialized) return;
-        _isInitialized = true;
-        await ViewModel.RefreshAsync();
-        ViewModel.SetupAutoRefresh();
+        await ViewModel.EnsureInitializedAsync();
 
         // Morning autopilot (temporarily disabled — re-enable when dialog sizing is fixed)
         // if (ViewModel.IsAiEnabled && ShouldShowMorningAutopilot())

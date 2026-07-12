@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Curia.Helpers;
 using Curia.Models;
 using Curia.Services;
 
@@ -162,6 +163,7 @@ public partial class DashboardViewModel : ObservableObject
     private readonly StateSnapshotService _stateSnapshotService;
     private readonly SilenceAlertService _silenceAlertService;
     private System.Timers.Timer? _refreshTimer;
+    private readonly AsyncInitializationGate _initialization = new();
     private List<string> _hiddenKeys = [];
     private List<ProjectCardViewModel> _allCards = [];
 
@@ -319,6 +321,13 @@ public partial class DashboardViewModel : ObservableObject
             IsLoading = false;
         }
     }
+
+    public Task EnsureInitializedAsync()
+        => _initialization.EnsureAsync(async () =>
+        {
+            await RefreshAsync();
+            SetupAutoRefresh();
+        });
 
     public async Task LoadTodayQueueAsync()
     {

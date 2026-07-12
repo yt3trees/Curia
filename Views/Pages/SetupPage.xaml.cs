@@ -9,6 +9,7 @@ namespace Curia.Views.Pages;
 public partial class SetupPage : WpfUserControl, INavigableView<SetupViewModel>
 {
     public SetupViewModel ViewModel { get; }
+    private bool _propertyChangedConnected;
 
     public SetupPage(SetupViewModel viewModel)
     {
@@ -26,10 +27,14 @@ public partial class SetupPage : WpfUserControl, INavigableView<SetupViewModel>
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await ViewModel.LoadProjectNamesAsync();
+        await ViewModel.EnsureInitializedAsync();
 
         // OutputText 変化時に自動スクロール
-        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        if (!_propertyChangedConnected)
+        {
+            _propertyChangedConnected = true;
+            ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

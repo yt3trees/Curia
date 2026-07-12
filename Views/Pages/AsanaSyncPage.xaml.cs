@@ -10,6 +10,7 @@ namespace Curia.Views.Pages;
 public partial class AsanaSyncPage : WpfUserControl, INavigableView<AsanaSyncViewModel>
 {
     public AsanaSyncViewModel ViewModel { get; }
+    private bool _logEntriesConnected;
 
     public AsanaSyncPage(AsanaSyncViewModel viewModel)
     {
@@ -20,8 +21,12 @@ public partial class AsanaSyncPage : WpfUserControl, INavigableView<AsanaSyncVie
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ViewModel.LogEntries.CollectionChanged += OnLogEntriesChanged;
-        await ViewModel.InitAsync();
+        if (!_logEntriesConnected)
+        {
+            _logEntriesConnected = true;
+            ViewModel.LogEntries.CollectionChanged += OnLogEntriesChanged;
+        }
+        await ViewModel.EnsureInitializedAsync();
     }
 
     private void OnLogEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)

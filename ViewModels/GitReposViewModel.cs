@@ -8,6 +8,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Curia.Models;
+using Curia.Helpers;
 using Curia.Services;
 
 namespace Curia.ViewModels;
@@ -47,6 +48,7 @@ public partial class GitReposViewModel : ObservableObject
 {
     private readonly ProjectDiscoveryService _discoveryService;
     private readonly ConfigService _configService;
+    private readonly AsyncInitializationGate _initialization = new();
 
     [ObservableProperty]
     private ObservableCollection<ProjectInfo> projects = [];
@@ -79,6 +81,8 @@ public partial class GitReposViewModel : ObservableObject
         foreach (var p in infos.Where(p => !hiddenKeys.Contains(p.HiddenKey)))
             Projects.Add(p);
     }
+
+    public Task EnsureInitializedAsync() => _initialization.EnsureAsync(InitAsync);
 
     // --- コマンド ---
 

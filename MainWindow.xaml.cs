@@ -28,6 +28,8 @@ public partial class MainWindow : FluentWindow
     private readonly IContentDialogService _contentDialogService;
     private readonly ConfigService _configService;
     private readonly CaptureService _captureService;
+    private readonly StartupPreloadService _startupPreloadService;
+    private readonly CancellationTokenSource _startupPreloadCancellation = new();
     private IntPtr _hwnd;
     private CaptureWindow? _activeCaptureWindow;
     private CommandPaletteWindow? _activeCommandPaletteWindow;
@@ -40,6 +42,7 @@ public partial class MainWindow : FluentWindow
     private bool _isCloaked = false;
     // OnFlashBlockerCollapseAndUncloak が待機すべき残りフレーム数
     private int _pendingUncloakFrames = 0;
+    private bool _startupPreloadScheduled;
 
     public MainWindow(
         IServiceProvider serviceProvider,
@@ -49,7 +52,8 @@ public partial class MainWindow : FluentWindow
         IPageService pageService,
         IContentDialogService contentDialogService,
         ConfigService configService,
-        CaptureService captureService)
+        CaptureService captureService,
+        StartupPreloadService startupPreloadService)
     {
         _serviceProvider = serviceProvider;
         _hotkeyService = hotkeyService;
@@ -59,6 +63,7 @@ public partial class MainWindow : FluentWindow
         _contentDialogService = contentDialogService;
         _configService = configService;
         _captureService = captureService;
+        _startupPreloadService = startupPreloadService;
 
         DataContext = _viewModel;
         InitializeComponent();
@@ -327,12 +332,37 @@ public partial class MainWindow : FluentWindow
         // 起動時: App.xaml.cs で画面外位置に設定済み。
         // OnLoaded で WPF が描画完了後、ウィンドウを画面中央に移動して表示する。
         MoveOnScreen();
+
+        if (!_startupPreloadScheduled)
+        {
+            _startupPreloadScheduled = true;
+            Dispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.ContextIdle,
+                new Action(StartStartupPreload));
+        }
+    }
+
+    private async void StartStartupPreload()
+    {
+        try
+        {
+            await _startupPreloadService.PreloadAsync(_startupPreloadCancellation.Token);
+        }
+        catch (OperationCanceledException) when (_startupPreloadCancellation.IsCancellationRequested)
+        {
+            // Application shutdown cancels pending preload work.
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[StartupPreload] Unexpected failure: {ex}");
+        }
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (WpfKeyboard.Modifiers.HasFlag(WpfModifierKeys.Shift))
         {
+            _startupPreloadCancellation.Cancel();
             _hotkeyService.Unregister();
             _trayService.Dispose();
             WpfApplication.Current.Shutdown();

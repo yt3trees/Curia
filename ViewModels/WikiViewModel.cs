@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Curia.Models;
+using Curia.Helpers;
 using Curia.Services;
 using Curia.Views;
 
@@ -78,6 +79,7 @@ public partial class WikiViewModel : ObservableObject
     private CancellationTokenSource? _cts;
     private bool _suppressDirtyTracking;
     private string _loadedPageContent = "";
+    private readonly AsyncInitializationGate _initialization = new();
 
     // ── プロジェクト選択 ──────────────────────────────
     [ObservableProperty] private ObservableCollection<ProjectInfo> projects = [];
@@ -240,6 +242,8 @@ public partial class WikiViewModel : ObservableObject
         }
         finally { IsLoading = false; }
     }
+
+    public Task EnsureInitializedAsync() => _initialization.EnsureAsync(InitAsync);
 
     // ────────────────────────────────────────────────
     // プロジェクト変更

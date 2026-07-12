@@ -15,6 +15,7 @@ using Wpf.Ui;
 using Wpf.Ui.Controls;
 using System.Threading;
 using Curia.Models;
+using Curia.Helpers;
 using Curia.Services;
 using Curia.Views.Pages;
 using TextBlock = System.Windows.Controls.TextBlock;
@@ -57,6 +58,7 @@ public partial class EditorViewModel : ObservableObject
     private CancellationTokenSource? _decisionLogCts;
     private string? _capturedContextForFocusUpdate;
     private string? _capturedContextForDecisionLog;
+    private readonly AsyncInitializationGate _initialization = new();
 
     // ---- 選択プロジェクト ----
     [ObservableProperty]
@@ -229,6 +231,8 @@ public partial class EditorViewModel : ObservableObject
                 IsLoading = false;
         }
     }
+
+    public Task EnsureInitializedAsync() => _initialization.EnsureAsync(LoadProjectsAsync);
 
     // =====================================================================
     // プロジェクト選択変更 -> ツリー再構築

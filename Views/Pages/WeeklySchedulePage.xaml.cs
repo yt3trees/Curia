@@ -42,7 +42,7 @@ public partial class WeeklySchedulePage : WpfUserControl, INavigableView<WeeklyS
         InitializeComponent();
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         // WeekGridControl に ViewModel を接続
         WeekGrid.ViewModel = ViewModel;
@@ -71,7 +71,14 @@ public partial class WeeklySchedulePage : WpfUserControl, INavigableView<WeeklyS
                 Dispatcher.Invoke(() => ShowMeetingNotesDialog(ev));
         }
 
-        _ = ViewModel.LoadWeekAsync();
+        try
+        {
+            await ViewModel.EnsureInitializedAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[WeeklySchedulePage] Initialization failed: {ex}");
+        }
     }
 
     // ─── Meeting Notes ダイアログ ──────────────────────────────────────

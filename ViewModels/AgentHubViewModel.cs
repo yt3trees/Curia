@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Curia.Models;
+using Curia.Helpers;
 using Curia.Services;
 
 namespace Curia.ViewModels;
@@ -290,6 +291,8 @@ public partial class AgentHubViewModel : ObservableObject
     private int _deploymentRefreshVersion;
     private CancellationTokenSource? _previewLoadCts;
     private int _previewLoadVersion;
+    private readonly AsyncInitializationGate _initialization = new();
+    private Exception? _initializationError;
 
     // ── Master Library ────────────────────────────────────────────────────
 
@@ -464,6 +467,7 @@ public partial class AgentHubViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
+        _initializationError = null;
         IsRefreshing = true;
         StatusMessage = "Loading Agent Hub...";
         try
@@ -476,6 +480,7 @@ public partial class AgentHubViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            _initializationError = ex;
             StatusMessage = $"Init error: {ex.Message}";
             Debug.WriteLine($"[AgentHubVM] Initialize failed: {ex}");
         }
@@ -484,6 +489,13 @@ public partial class AgentHubViewModel : ObservableObject
             IsRefreshing = false;
         }
     }
+
+    public Task EnsureInitializedAsync() => _initialization.EnsureAsync(async () =>
+    {
+        await InitializeAsync();
+        if (_initializationError != null)
+            throw new InvalidOperationException("Agent Hub initialization failed.", _initializationError);
+    });
 
     public async Task LoadLibraryAsync()
     {

@@ -25,7 +25,7 @@ public partial class GitReposPage : WpfUserControl, INavigableView<GitReposViewM
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await ViewModel.InitAsync();
+        await ViewModel.EnsureInitializedAsync();
     }
 
     private void OnShowGitLog(object sender, RoutedEventArgs e)

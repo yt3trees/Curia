@@ -8,6 +8,7 @@ using System.Windows;
 using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Curia.Helpers;
 using Curia.Models;
 using Curia.Services;
 
@@ -34,6 +35,7 @@ public partial class SetupViewModel : ObservableObject
     private readonly ContextCompressionLayerService _contextCompressionLayerService;
     private CancellationTokenSource? _cts;
     private readonly SemaphoreSlim _manageWorkstreamsLoadLock = new(1, 1);
+    private readonly AsyncInitializationGate _initialization = new();
 
     // 内部用プロジェクト情報リスト (Tier/Category 自動判定)
     private List<ProjectInfo> _projectInfos = [];
@@ -158,6 +160,8 @@ public partial class SetupViewModel : ObservableObject
 
         await LoadManageWorkstreamsAsync();
     }
+
+    public Task EnsureInitializedAsync() => _initialization.EnsureAsync(LoadProjectNamesAsync);
 
     // --- コマンド ---
 

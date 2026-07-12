@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Curia.Models;
+using Curia.Helpers;
 using Curia.Services;
 
 namespace Curia.ViewModels;
@@ -52,6 +53,9 @@ public partial class WeeklyScheduleViewModel : ObservableObject
     private DateTime _tasksCachedAt = DateTime.MinValue;
     private HashSet<string> _cachedHiddenKeys = [];
     private const int TasksCacheTtlSeconds = 300;
+    private readonly AsyncInitializationGate _initialization = new();
+    private int _loadVersion;
+    private Exception? _initializationError;
 
     public WeeklyScheduleViewModel(
         ScheduleService scheduleService,
@@ -98,6 +102,8 @@ public partial class WeeklyScheduleViewModel : ObservableObject
 
     public async Task LoadWeekAsync()
     {
+        var weekStart = WeekStart;
+        var loadVersion = Interlocked.Increment(ref _loadVersion);
         IsLoading = true;
         StatusText = "Loading...";
         try
@@ -128,14 +134,14 @@ public partial class WeeklyScheduleViewModel : ObservableObject
                 _cachedHiddenKeys = hiddenKeys;
             }
 
-            var blocksInWeek = _scheduleService.GetBlocksForWeek(WeekStart);
+            var blocksInWeek = _scheduleService.GetBlocksForWeek(weekStart);
 
             // カレンダーイベント取得 (ICS 優先、次いで COM Interop)
             var settings = _configService.LoadSettings();
             IReadOnlyList<OutlookEvent> outlookEvents = [];
             if (settings.IcsCalendarEnabled && !string.IsNullOrWhiteSpace(settings.IcsCalendarUrl))
             {
-                try { outlookEvents = await _icsCalendarService.GetEventsForWeekAsync(settings.IcsCalendarUrl, WeekStart); }
+                try { outlookEvents = await _icsCalendarService.GetEventsForWeekAsync(settings.IcsCalendarUrl, weekStart); }
                 catch { /* 取得失敗はサイレント無視 */ }
 
                 // 除外ワードでフィルタ
@@ -146,7 +152,7 @@ public partial class WeeklyScheduleViewModel : ObservableObject
                     outlookEvents = outlookEvents.Where(e => !excludes.Contains(e.Subject)).ToList();
             }
             else if (settings.OutlookCalendarEnabled)
-                outlookEvents = await _outlookCalendarService.GetEventsForWeekAsync(WeekStart);
+                outlookEvents = await _outlookCalendarService.GetEventsForWeekAsync(weekStart);
 
             // TitleSnapshot をライブタスクで更新
             var identityToTask = allTasks
@@ -198,6 +204,9 @@ public partial class WeeklyScheduleViewModel : ObservableObject
 
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
+                if (loadVersion != _loadVersion)
+                    return;
+
                 TaskListGroups.Clear();
                 foreach (var g in taskListGroups) TaskListGroups.Add(g);
 
@@ -221,13 +230,26 @@ public partial class WeeklyScheduleViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Error: {ex.Message}";
+            if (loadVersion == _loadVersion)
+            {
+                _initializationError = ex;
+                StatusText = $"Error: {ex.Message}";
+            }
         }
         finally
         {
-            IsLoading = false;
+            if (loadVersion == _loadVersion)
+                IsLoading = false;
         }
     }
+
+    public Task EnsureInitializedAsync() => _initialization.EnsureAsync(async () =>
+    {
+        _initializationError = null;
+        await LoadWeekAsync();
+        if (_initializationError != null)
+            throw new InvalidOperationException("Schedule initialization failed.", _initializationError);
+    });
 
     // --- ブロック追加 ---
 

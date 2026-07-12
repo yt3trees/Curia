@@ -80,5 +80,5 @@ public partial class AgentChatPage : WpfUserControl, INavigableView<AgentChatVie
             Dispatcher.BeginInvoke(MessageScrollViewer.ScrollToEnd);
     }
 
-    private async void OnLoaded(object sender, System.Windows.RoutedEventArgs e) => await ViewModel.InitializeAsync();
+    private async void OnLoaded(object sender, System.Windows.RoutedEventArgs e) => await ViewModel.EnsureInitializedAsync();
 }

@@ -10,6 +10,7 @@ namespace Curia.Views.Pages;
 public partial class SettingsPage : WpfUserControl, INavigableView<SettingsViewModel>
 {
     public SettingsViewModel ViewModel { get; }
+    private bool _propertyChangedConnected;
 
     public SettingsPage(SettingsViewModel viewModel)
     {
@@ -29,15 +30,19 @@ public partial class SettingsPage : WpfUserControl, INavigableView<SettingsViewM
         InitializeComponent();
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        ViewModel.Load();
+        await ViewModel.EnsureInitializedAsync();
         InitAutoRefreshCombo();
         // PasswordBox はバインディング非対応のため、ロード後に手動でセット
         LlmApiKeyBox.Password = ViewModel.LlmApiKey;
         AsanaTokenBox.Password = ViewModel.AsanaToken;
         UpdateColorPreviews();
-        ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        if (!_propertyChangedConnected)
+        {
+            _propertyChangedConnected = true;
+            ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

@@ -116,6 +116,7 @@ public partial class App : WpfApplication
         services.AddSingleton<WikiIngestService>();
         services.AddSingleton<WikiQueryService>();
         services.AddSingleton<WikiLintService>();
+        services.AddSingleton<StartupPreloadService>();
 
         // Curia cross-project query
         services.AddSingleton<ICuriaSourceAdapter, DecisionLogSourceAdapter>();

@@ -30,7 +30,14 @@ public partial class TimelinePage : WpfUserControl, INavigableView<TimelineViewM
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await ViewModel.InitAsync();
+        try
+        {
+            await ViewModel.EnsureInitializedAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[TimelinePage] Initialization failed: {ex}");
+        }
         PeriodComboBox.SelectedIndex = 0; // 30 days
 
         // Dashboard からのジャンプ要求があれば対応するプロジェクトを選択

@@ -131,7 +131,7 @@ public partial class EditorPage : WpfUserControl, INavigableView<EditorViewModel
         // ハイライト定義を一度だけ登録
         RegisterMarkdownHighlighting();
 
-        await ViewModel.LoadProjectsAsync();
+        await ViewModel.EnsureInitializedAsync();
         ApplyEditorTheme();
         _editor.FontSize = ViewModel.EditorFontSize;
     }

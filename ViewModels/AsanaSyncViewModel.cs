@@ -7,6 +7,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Curia.Models;
+using Curia.Helpers;
 using Curia.Services;
 
 namespace Curia.ViewModels;
@@ -17,7 +18,7 @@ public partial class AsanaSyncViewModel : ObservableObject
     private readonly ProjectDiscoveryService _discoveryService;
     private readonly AsanaSyncService _asanaSyncService;
     private System.Timers.Timer? _syncTimer;
-    private bool _initialized;
+    private readonly AsyncInitializationGate _initialization = new();
 
     [ObservableProperty]
     private ObservableCollection<ProjectInfo> projects = [];
@@ -92,9 +93,6 @@ public partial class AsanaSyncViewModel : ObservableObject
 
     public async Task InitAsync()
     {
-        if (_initialized) return;
-        _initialized = true;
-
         // プロジェクトリスト読み込み
         var infos = await Task.Run(() => _discoveryService.GetProjectInfoList());
         Projects.Clear();
@@ -102,6 +100,8 @@ public partial class AsanaSyncViewModel : ObservableObject
 
         // スケジュール設定は StartScheduler() で読み込み済み
     }
+
+    public Task EnsureInitializedAsync() => _initialization.EnsureAsync(InitAsync);
 
     [RelayCommand]
     private async Task Sync() => await RunSyncAsync();

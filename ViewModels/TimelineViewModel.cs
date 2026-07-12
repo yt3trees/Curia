@@ -77,6 +77,8 @@ public partial class TimelineViewModel : ObservableObject
     private List<string> _hiddenKeys = [];
     private List<TimelineRawEntry> _cachedRawEntries = [];
     private CancellationTokenSource? _heatmapCts;
+    private readonly AsyncInitializationGate _initialization = new();
+    private Exception? _initializationError;
 
     // focus_history プレビューキャッシュ: filePath → (LastWriteTimeUtc, previewText)
     // ファイルが更新されていなければ再読み込みしない
@@ -153,6 +155,7 @@ public partial class TimelineViewModel : ObservableObject
     /// <summary>ページ表示時に呼ぶ。プロジェクトリストを読み込む。</summary>
     public async Task InitAsync()
     {
+        _initializationError = null;
         IsLoading = true;
         try
         {
@@ -164,6 +167,7 @@ public partial class TimelineViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            _initializationError = ex;
             Debug.WriteLine($"[Timeline] InitAsync failed: {ex}");
         }
         finally
@@ -173,6 +177,13 @@ public partial class TimelineViewModel : ObservableObject
 
         await Task.WhenAll(LoadEntriesAsync(), LoadHeatmapAsync());
     }
+
+    public Task EnsureInitializedAsync() => _initialization.EnsureAsync(async () =>
+    {
+        await InitAsync();
+        if (_initializationError != null)
+            throw new InvalidOperationException("Timeline initialization failed.", _initializationError);
+    });
 
     partial void OnShowHiddenChanged(bool value)
     {

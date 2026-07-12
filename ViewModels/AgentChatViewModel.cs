@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Curia.Models;
+using Curia.Helpers;
 using Curia.Services;
 using Curia.Services.Agent;
 
@@ -19,9 +20,7 @@ public partial class AgentChatViewModel : ObservableObject
     private CancellationTokenSource? _runCts;
     private TaskCompletionSource<bool>? _approvalTcs;
     private readonly HashSet<string> _autoApprovedTools = new(StringComparer.OrdinalIgnoreCase);
-    private bool _historyLoaded;
-    private readonly object _initializationLock = new();
-    private Task? _initializationTask;
+    private readonly AsyncInitializationGate _initialization = new();
 
     public ObservableCollection<AgentChatMessage> Messages { get; } = [];
     public ObservableCollection<AgentChatSessionSummary> Sessions { get; } = [];
@@ -79,17 +78,14 @@ public partial class AgentChatViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
-        RefreshAvailability();
-        Task initialization;
-        lock (_initializationLock)
-            initialization = _initializationTask ??= InitializeCoreAsync();
-        await initialization;
+        await EnsureInitializedAsync();
     }
+
+    public Task EnsureInitializedAsync() => _initialization.EnsureAsync(InitializeCoreAsync);
 
     private async Task InitializeCoreAsync()
     {
-        if (_historyLoaded) return;
-        _historyLoaded = true;
+        RefreshAvailability();
         var messages = await _historyService.LoadLatestSessionAsync();
         foreach (var message in messages) Messages.Add(message);
         if (messages.Count > 0) StatusMessage = "Restored the most recent chat session.";

@@ -5,6 +5,7 @@ using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Curia.Helpers;
 using Curia.Models;
 using Curia.Services;
 using Curia.Services.Agent;
@@ -21,6 +22,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly OutlookCalendarService _outlookCalendarService;
     private readonly IcsCalendarService _icsCalendarService;
     private bool _loading;
+    private readonly AsyncInitializationGate _initialization = new();
 
     // ホットキー
     [ObservableProperty]
@@ -311,6 +313,13 @@ public partial class SettingsViewModel : ObservableObject
             _loading = false;
         }
     }
+
+    public Task EnsureInitializedAsync()
+        => _initialization.EnsureAsync(() =>
+        {
+            Load();
+            return Task.CompletedTask;
+        });
 
     partial void OnStartupEnabledChanged(bool value)
     {

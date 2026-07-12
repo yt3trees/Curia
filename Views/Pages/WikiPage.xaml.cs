@@ -116,53 +116,53 @@ public partial class WikiPage : WpfUserControl, INavigableView<WikiViewModel>
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_isInitialized) return;
-        _isInitialized = true;
-
-        var appRes = Application.Current.Resources;
-        _tabActiveBrush   = appRes.Contains("AppSurface2")
-            ? (System.Windows.Media.Brush)appRes["AppSurface2"]
-            : System.Windows.Media.Brushes.Gray;
-        _tabInactiveBrush = System.Windows.Media.Brushes.Transparent;
-        UpdateTabStyles();
-        ApplyEditorTheme();
-        RegisterMarkdownHighlighting();
-        _wikiEditor.SyntaxHighlighting = _markdownHighlighting;
-
-        ViewModel.PropertyChanged += (_, args) =>
+        if (!_isInitialized)
         {
-            if (args.PropertyName == nameof(WikiViewModel.ActiveTab))
-                UpdateTabStyles();
-            else if (args.PropertyName == nameof(WikiViewModel.PreviewContent))
-            {
-                SyncEditorFromViewModel();
-                SyncRenderFromViewModel();
-            }
-            else if (args.PropertyName == nameof(WikiViewModel.SelectedQueryRecord))
-                UpdateQueryAnswerView();
-            else if (args.PropertyName == nameof(WikiViewModel.EditorFontSize))
-                _wikiEditor.FontSize = ViewModel.EditorFontSize;
-            else if (args.PropertyName == nameof(WikiViewModel.MarkdownRenderFontSize))
-            {
-                SyncRenderFromViewModel();
-                UpdateQueryAnswerView();
-            }
-            else if (args.PropertyName == nameof(WikiViewModel.EditorTextColor))
-                ApplyEditorTheme();
-            else if (args.PropertyName == nameof(WikiViewModel.MarkdownRenderTextColor))
-            {
-                SyncRenderFromViewModel();
-                UpdateQueryAnswerView();
-            }
-        };
+            _isInitialized = true;
 
-        ViewModel.ConversationLog.CollectionChanged += (_, _) =>
-            UpdateQueryAnswerView();
-        ViewModel.SessionPreviewRecords.CollectionChanged += (_, _) =>
-            UpdateQueryAnswerView();
+            var appRes = Application.Current.Resources;
+            _tabActiveBrush   = appRes.Contains("AppSurface2")
+                ? (System.Windows.Media.Brush)appRes["AppSurface2"]
+                : System.Windows.Media.Brushes.Gray;
+            _tabInactiveBrush = System.Windows.Media.Brushes.Transparent;
+            UpdateTabStyles();
+            ApplyEditorTheme();
+            RegisterMarkdownHighlighting();
+            _wikiEditor.SyntaxHighlighting = _markdownHighlighting;
 
-        _wikiEditor.FontSize = ViewModel.EditorFontSize;
-        await ViewModel.InitAsync();
+            ViewModel.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(WikiViewModel.ActiveTab))
+                    UpdateTabStyles();
+                else if (args.PropertyName == nameof(WikiViewModel.PreviewContent))
+                {
+                    SyncEditorFromViewModel();
+                    SyncRenderFromViewModel();
+                }
+                else if (args.PropertyName == nameof(WikiViewModel.SelectedQueryRecord))
+                    UpdateQueryAnswerView();
+                else if (args.PropertyName == nameof(WikiViewModel.EditorFontSize))
+                    _wikiEditor.FontSize = ViewModel.EditorFontSize;
+                else if (args.PropertyName == nameof(WikiViewModel.MarkdownRenderFontSize))
+                {
+                    SyncRenderFromViewModel();
+                    UpdateQueryAnswerView();
+                }
+                else if (args.PropertyName == nameof(WikiViewModel.EditorTextColor))
+                    ApplyEditorTheme();
+                else if (args.PropertyName == nameof(WikiViewModel.MarkdownRenderTextColor))
+                {
+                    SyncRenderFromViewModel();
+                    UpdateQueryAnswerView();
+                }
+            };
+
+            ViewModel.ConversationLog.CollectionChanged += (_, _) => UpdateQueryAnswerView();
+            ViewModel.SessionPreviewRecords.CollectionChanged += (_, _) => UpdateQueryAnswerView();
+            _wikiEditor.FontSize = ViewModel.EditorFontSize;
+        }
+
+        await ViewModel.EnsureInitializedAsync();
     }
 
     private void ResetRenderScroll()
