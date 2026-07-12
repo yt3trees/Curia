@@ -10,7 +10,7 @@ public class ReadFileTool : ICuriaAgentTool
     private readonly AgentPathGuard _guard;
     private readonly FileEncodingService _files;
     public ReadFileTool(AgentPathGuard guard, FileEncodingService files) => (_guard, _files) = (guard, files);
-    public AgentToolDescriptor Descriptor { get; } = new() { Name = "read_file", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Reads a file within managed Curia roots.", ParametersSchema = "{\"path\": \"required absolute managed path\"}" };
+    public AgentToolDescriptor Descriptor { get; } = new() { Name = "read_managed_file", Aliases = ["read_file"], RiskLevel = ToolRiskLevel.ReadOnly, Description = "Reads a bounded page of a file within managed Curia roots.", CapabilityRequirements = AgentToolCapability.ManagedRoots, ParametersSchema = "{\"path\": \"required absolute managed path\",\"offset\":\"optional number of characters, default 0\",\"max_chars\":\"optional number 1-20000, default 8000\"}" };
     public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
     {
         if (!_guard.TryResolve(AgentToolArguments.String(arguments, "path"), out var path, out var error)) return Fail(error);
@@ -18,7 +18,14 @@ public class ReadFileTool : ICuriaAgentTool
         if (!_guard.Revalidate(path, out error)) return Fail(error);
         var (content, encoding) = await _files.ReadFileAsync(path, ct);
         if (!_guard.Revalidate(path, out error)) return Fail(error);
-        return AgentToolArguments.JsonResult(new { Path = path, Encoding = encoding, Content = content }, "File read");
+        var offset = Math.Clamp(arguments["offset"]?.GetValue<int?>() ?? 0, 0, content.Length);
+        var maxChars = Math.Clamp(arguments["max_chars"]?.GetValue<int?>() ?? 8_000, 1, 20_000);
+        var length = Math.Min(maxChars, content.Length - offset);
+        var nextOffset = offset + length;
+        var result = AgentToolArguments.JsonResult(new { Path = path, Encoding = encoding, Offset = offset, Content = content.Substring(offset, length) }, "File read");
+        result.Truncated = nextOffset < content.Length;
+        result.NextCursor = result.Truncated ? nextOffset.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
+        return result;
     }
     private static AgentToolResult Fail(string content) => new() { Success = false, Content = content, DisplaySummary = "Read denied" };
 }
@@ -29,7 +36,7 @@ public class AppendToFileTool : ICuriaAgentTool
     private readonly AgentPathGuard _guard;
     private readonly FileEncodingService _files;
     public AppendToFileTool(AgentPathGuard guard, FileEncodingService files) => (_guard, _files) = (guard, files);
-    public AgentToolDescriptor Descriptor { get; } = new() { Name = "append_to_file", RiskLevel = ToolRiskLevel.Write, Description = "Appends Markdown text to an existing file within managed Curia roots.", ParametersSchema = "{\"path\": \"required absolute managed path\", \"content\": \"required text\"}" };
+    public AgentToolDescriptor Descriptor { get; } = new() { Name = "append_to_file", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.Write, Description = "Appends Markdown text to an existing file within managed Curia roots.", ParametersSchema = "{\"path\": \"required absolute managed path\", \"content\": \"required text\"}" };
     public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
     {
         if (!_guard.TryResolve(AgentToolArguments.String(arguments, "path"), out var path, out var error)) return Fail(error);
@@ -59,7 +66,7 @@ public class CreateTaskTool : ICuriaAgentTool
     private readonly ProjectDiscoveryService _discovery;
     private readonly CaptureService _capture;
     public CreateTaskTool(ProjectDiscoveryService discovery, CaptureService capture) => (_discovery, _capture) = (discovery, capture);
-    public AgentToolDescriptor Descriptor { get; } = new() { Name = "create_task", RiskLevel = ToolRiskLevel.Write, Description = "Creates an Asana task in a managed project after approval.", ParametersSchema = "{\"project\":\"required project name\",\"title\":\"required task title\",\"due_on\":\"optional YYYY-MM-DD\",\"notes\":\"optional\",\"project_gid\":\"optional configured Asana project GID\"}" };
+    public AgentToolDescriptor Descriptor { get; } = new() { Name = "create_task", CapabilityRequirements = AgentToolCapability.Asana, RiskLevel = ToolRiskLevel.Write, Description = "Creates an Asana task in a managed project after approval.", ParametersSchema = "{\"project\":\"required project name\",\"title\":\"required task title\",\"due_on\":\"optional YYYY-MM-DD\",\"notes\":\"optional\",\"project_gid\":\"optional configured Asana project GID\"}" };
     public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
     {
         var projects = await _discovery.GetProjectInfoListAsync(ct: ct);
@@ -83,7 +90,7 @@ public class CaptureNoteTool : ICuriaAgentTool
 {
     private readonly CaptureService _capture;
     public CaptureNoteTool(CaptureService capture) => _capture = capture;
-    public AgentToolDescriptor Descriptor { get; } = new() { Name = "capture_note", RiskLevel = ToolRiskLevel.Write, Description = "Adds a timestamped note to Curia's capture log after approval.", ParametersSchema = "{\"content\":\"required note text\"}" };
+    public AgentToolDescriptor Descriptor { get; } = new() { Name = "capture_inbox_note", Aliases = ["capture_note"], RiskLevel = ToolRiskLevel.Write, Description = "Adds a timestamped note to Curia's capture log after approval.", ParametersSchema = "{\"content\":\"required note text\"}" };
     public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
     {
         var content = AgentToolArguments.String(arguments, "content");
@@ -98,7 +105,7 @@ public class SyncAsanaTool : ICuriaAgentTool
     private readonly AsanaSyncService _sync;
     private readonly ConfigService _config;
     public SyncAsanaTool(AsanaSyncService sync, ConfigService config) => (_sync, _config) = (sync, config);
-    public AgentToolDescriptor Descriptor { get; } = new() { Name = "sync_asana", RiskLevel = ToolRiskLevel.Write, Description = "Runs Asana synchronization after approval.", ParametersSchema = "{}" };
+    public AgentToolDescriptor Descriptor { get; } = new() { Name = "sync_asana", CapabilityRequirements = AgentToolCapability.Asana, RiskLevel = ToolRiskLevel.Write, Description = "Runs Asana synchronization after approval.", ParametersSchema = "{}" };
     public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
     {
         var lines = new List<string>();
@@ -107,14 +114,3 @@ public class SyncAsanaTool : ICuriaAgentTool
     }
 }
 
-public class GenerateStandupTool : ICuriaAgentTool
-{
-    private readonly StandupGeneratorService _standup;
-    public GenerateStandupTool(StandupGeneratorService standup) => _standup = standup;
-    public AgentToolDescriptor Descriptor { get; } = new() { Name = "generate_standup", RiskLevel = ToolRiskLevel.Write, Description = "Regenerates today's standup after approval.", ParametersSchema = "{}" };
-    public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
-    {
-        await _standup.GenerateTodayAsync(ct);
-        return new AgentToolResult { Success = true, Content = _standup.GetTodayStandupPath(), DisplaySummary = "Standup generated" };
-    }
-}

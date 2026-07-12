@@ -29,19 +29,21 @@ public partial class AgentChatPage : WpfUserControl, INavigableView<AgentChatVie
         {
             if (System.Windows.Window.GetWindow(this) is MainWindow window) window.NavigateToEditorAndOpenFile(project, path);
         });
-        _uiActions.OpenInTimelineAsync = async project => await Dispatcher.InvokeAsync(() =>
-        {
-            if (System.Windows.Window.GetWindow(this) is MainWindow window) window.NavigateToTimeline(project);
-        });
-        _uiActions.NavigateAsync = async page => await Dispatcher.InvokeAsync(() =>
+        _uiActions.NavigateAsync = async (page, project) => await Dispatcher.InvokeAsync(() =>
         {
             if (System.Windows.Window.GetWindow(this) is not MainWindow window) return;
+            if (page == "timeline" && project != null)
+            {
+                window.NavigateToTimeline(project);
+                return;
+            }
             window.RootNavigation.Navigate(page switch
             {
                 "dashboard" => typeof(DashboardPage), "wiki" => typeof(WikiPage), "schedule" => typeof(WeeklySchedulePage),
                 "editor" => typeof(EditorPage), "timeline" => typeof(TimelinePage), _ => typeof(SettingsPage)
             });
         });
+        ViewModel.RefreshTools();
         _uiActions.ReviewFocusUpdateAsync = async (result, refine) => await Dispatcher.InvokeAsync(async () =>
         {
             var owner = System.Windows.Window.GetWindow(this);

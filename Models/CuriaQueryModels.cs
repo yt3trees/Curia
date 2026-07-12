@@ -43,6 +43,17 @@ public class CuriaQueryOptions
     public int? RecencyWindowDays { get; set; }
 }
 
+public class CuriaKnowledgeMatch
+{
+    public string Path { get; set; } = "";
+    public CuriaSourceType SourceType { get; set; }
+    public string ProjectId { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Excerpt { get; set; } = "";
+    public DateTime LastModified { get; set; }
+    public string? Content { get; set; }
+}
+
 public class CuriaConversationTurn
 {
     public string Question { get; set; } = "";

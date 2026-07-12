@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Diagnostics;
 using Curia.Models;
 
 namespace Curia.Services.Agent;
@@ -10,14 +11,16 @@ public class AgentOrchestratorService
     private readonly ConfigService _configService;
     private readonly ProjectDiscoveryService _discovery;
     private readonly AgentToolRegistry _registry;
+    private readonly AgentToolUsageLogService _usageLog;
 
     public AgentOrchestratorService(LlmClientService llm, ConfigService configService,
-        ProjectDiscoveryService discovery, AgentToolRegistry registry)
+        ProjectDiscoveryService discovery, AgentToolRegistry registry, AgentToolUsageLogService usageLog)
     {
         _llm = llm;
         _configService = configService;
         _discovery = discovery;
         _registry = registry;
+        _usageLog = usageLog;
     }
 
     public async Task<AgentChatMessage> RunTurnAsync(List<AgentChatMessage> history, string userInput,
@@ -57,26 +60,8 @@ public class AgentOrchestratorService
 
             var toolCall = call!;
             progressCallback(new AgentChatMessage { Kind = AgentMessageKind.ToolCall, ToolCall = toolCall, Text = toolCall.Reason });
-            AgentToolResult result;
-            if (!_registry.TryGet(toolCall.Tool, out var tool) || tool == null)
-            {
-                result = new AgentToolResult { Success = false, Content = $"Unknown tool: {toolCall.Tool}", DisplaySummary = "Unknown tool" };
-            }
-            else if (tool.Descriptor.RiskLevel != ToolRiskLevel.ReadOnly && !await approvalCallback(toolCall))
-            {
-                result = new AgentToolResult { Success = false, Content = "User rejected this action.", DisplaySummary = "Rejected" };
-            }
-            else
-            {
-                try
-                {
-                    EnsureAgentAvailable();
-                    result = await tool.ExecuteAsync(toolCall.Arguments, ct);
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex) { result = new AgentToolResult { Success = false, Content = $"Tool error: {ex.Message}", DisplaySummary = "Error" }; }
-            }
-
+            var result = await ExecuteToolAsync(toolCall, settings, approvalCallback, ct);
+            var modelContent = AgentToolContract.ToEnvelope(result, settings.AgentToolResultMaxChars);
             result.Content = Truncate(result.Content, settings.AgentToolResultMaxChars);
             progressCallback(new AgentChatMessage
             {
@@ -86,7 +71,7 @@ public class AgentOrchestratorService
                 ToolResultContent = result.Content
             });
             messages.Add(("assistant", JsonSerializer.Serialize(new { type = "tool_call", tool = toolCall.Tool, arguments = toolCall.Arguments, reason = toolCall.Reason })));
-            messages.Add(("user", $"Tool result for {toolCall.Tool} ({(result.Success ? "success" : "failure")}):\n{result.Content}\n\nReply with one JSON object only."));
+            messages.Add(("user", $"Tool result for {toolCall.Tool}:\n{modelContent}\n\nReply with one JSON object only."));
         }
 
         messages.Add(("user", "Do not call any more tools. Give the best final answer using the information already available. Reply with one JSON object only."));
@@ -134,7 +119,8 @@ public class AgentOrchestratorService
             {
                 var toolCall = new AgentToolCall { Tool = nativeCall.Name, Arguments = nativeCall.Arguments, Reason = "Requested by the model." };
                 progressCallback(new AgentChatMessage { Kind = AgentMessageKind.ToolCall, ToolCall = toolCall, Text = toolCall.Reason });
-                var result = await ExecuteToolAsync(toolCall, approvalCallback, ct);
+                var result = await ExecuteToolAsync(toolCall, settings, approvalCallback, ct);
+                var modelContent = AgentToolContract.ToEnvelope(result, settings.AgentToolResultMaxChars);
                 result.Content = Truncate(result.Content, settings.AgentToolResultMaxChars);
                 progressCallback(new AgentChatMessage
                 {
@@ -143,7 +129,7 @@ public class AgentOrchestratorService
                     Text = result.DisplaySummary ?? (result.Success ? "Completed" : "Failed"),
                     ToolResultContent = result.Content
                 });
-                messages.Add(new NativeAgentMessage { Role = "tool", ToolCallId = nativeCall.Id, Content = result.Content });
+                messages.Add(new NativeAgentMessage { Role = "tool", ToolCallId = nativeCall.Id, Content = modelContent });
             }
         }
 
@@ -154,18 +140,37 @@ public class AgentOrchestratorService
 
     private async Task<AgentToolResult> ExecuteToolAsync(
         AgentToolCall toolCall,
+        AppSettings settings,
         Func<AgentToolCall, Task<bool>> approvalCallback,
         CancellationToken ct)
     {
+        var watch = Stopwatch.StartNew();
+        var approvalRequested = false;
+        var approved = true;
+        AgentToolResult result;
         if (!_registry.TryGet(toolCall.Tool, out var tool) || tool == null)
-            return new AgentToolResult { Success = false, Content = $"Unknown tool: {toolCall.Tool}", DisplaySummary = "Unknown tool" };
+            result = new AgentToolResult { Success = false, Code = "unknown_tool", Content = $"Unknown tool: {toolCall.Tool}", DisplaySummary = "Unknown tool" };
+        else if (!AgentToolContract.TryValidate(tool.Descriptor.ParametersSchema, toolCall.Arguments, out var validationError))
+            result = new AgentToolResult { Success = false, Code = "invalid_arguments", Content = validationError, DisplaySummary = "Invalid arguments" };
+        else
+        {
         EnsureAgentAvailable();
-        if (tool.Descriptor.RiskLevel != ToolRiskLevel.ReadOnly && !await approvalCallback(toolCall))
-            return new AgentToolResult { Success = false, Content = "User rejected this action.", DisplaySummary = "Rejected" };
+        approvalRequested = tool.Descriptor.RiskLevel != ToolRiskLevel.ReadOnly;
+        if (approvalRequested) approved = await approvalCallback(toolCall);
+        if (!approved)
+            result = new AgentToolResult { Success = false, Code = "rejected", Content = "User rejected this action.", DisplaySummary = "Rejected" };
+        else
+        {
         EnsureAgentAvailable();
-        try { return await tool.ExecuteAsync(toolCall.Arguments, ct); }
+        try { result = await tool.ExecuteAsync(toolCall.Arguments, ct); }
         catch (OperationCanceledException) { throw; }
-        catch (Exception ex) { return new AgentToolResult { Success = false, Content = $"Tool error: {ex.Message}", DisplaySummary = "Error" }; }
+        catch (Exception ex) { result = new AgentToolResult { Success = false, Code = "execution_error", Content = $"Tool error: {ex.Message}", DisplaySummary = "Error" }; }
+        }
+        }
+        if (!result.Success && result.Code == "ok") result.Code = "failed";
+        await _usageLog.RecordAsync(toolCall.Tool, result.Success, result.Code, watch.ElapsedMilliseconds, result.Content.Length,
+            approvalRequested, approved, settings.LlmProvider, ct);
+        return result;
     }
 
     private string BuildSystemPrompt(AppSettings settings, IEnumerable<ProjectInfo> projects, bool nativeToolCalling)
@@ -185,7 +190,7 @@ public class AgentOrchestratorService
             nativeToolCalling ? "- Never invent tool results or project facts." : "- To call a tool: {\"type\":\"tool_call\",\"tool\":\"<name>\",\"arguments\":{},\"reason\":\"<short>\"}",
             nativeToolCalling ? "- Write tools require user approval before they run." : "- To answer: {\"type\":\"final_answer\",\"text\":\"<markdown>\"}",
             "- Gather facts with tools before answering. Do not guess project data.",
-            "- Use ask_knowledge_base for open-ended decision or knowledge questions, including questions about managed Wiki pages.",
+            "- Use search_knowledge for open-ended decision or knowledge questions, including managed Wiki pages. Use its primary-source results to answer; do not invoke another knowledge-answering model.",
             $"- Respond in {settings.LlmLanguage}.",
             "",
             nativeToolCalling ? "Use native tool calls rather than embedding JSON tool requests in text." : "Example tool call: {\"type\":\"tool_call\",\"tool\":\"get_today_tasks\",\"arguments\":{\"bucket\":\"today\"},\"reason\":\"Check today's tasks\"}",

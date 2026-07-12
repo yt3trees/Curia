@@ -63,7 +63,7 @@ public class GetTodayTasksTool : ICuriaAgentTool
     public GetTodayTasksTool(ProjectDiscoveryService discovery, TodayQueueService queue) => (_discovery, _queue) = (discovery, queue);
     public AgentToolDescriptor Descriptor { get; } = new()
     {
-        Name = "get_today_tasks", RiskLevel = ToolRiskLevel.ReadOnly,
+        Name = "get_today_tasks", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.ReadOnly,
         Description = "Gets prioritized outstanding tasks. Optionally filter bucket: overdue, today, soon, or normal.",
         ParametersSchema = "{\"bucket\": \"optional: overdue|today|soon|normal\", \"limit\": " + "optional number" + "}"
     };
@@ -91,7 +91,7 @@ public class GetProjectTasksTool : ICuriaAgentTool
     public GetProjectTasksTool(ProjectDiscoveryService discovery, AsanaTaskParser parser) => (_discovery, _parser) = (discovery, parser);
     public AgentToolDescriptor Descriptor { get; } = new()
     {
-        Name = "get_project_tasks", RiskLevel = ToolRiskLevel.ReadOnly,
+        Name = "get_project_tasks", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.ReadOnly,
         Description = "Gets parsed tasks from a project's tasks.md. Optional workstream and status filters are supported.",
         ParametersSchema = "{\"project\": \"required project name\", \"workstream\": \"optional id\", \"status\": \"optional: in_progress|not_started|completed|collaborating\"}"
     };
@@ -135,7 +135,7 @@ public class SearchDecisionLogsTool : ICuriaAgentTool
     public SearchDecisionLogsTool(ProjectDiscoveryService discovery, DecisionLogService decisionLogs) => (_discovery, _decisionLogs) = (discovery, decisionLogs);
     public AgentToolDescriptor Descriptor { get; } = new()
     {
-        Name = "search_decision_logs", RiskLevel = ToolRiskLevel.ReadOnly,
+        Name = "search_decision_logs", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.ReadOnly,
         Description = "Searches decision logs by keyword, optionally restricted to one project.",
         ParametersSchema = "{\"query\": \"required search keywords\", \"project\": \"optional project name\"}"
     };
@@ -173,7 +173,7 @@ public class AskKnowledgeBaseTool : ICuriaAgentTool
     public AskKnowledgeBaseTool(CuriaQueryService query) => _query = query;
     public AgentToolDescriptor Descriptor { get; } = new()
     {
-        Name = "ask_knowledge_base", RiskLevel = ToolRiskLevel.ReadOnly,
+        Name = "ask_knowledge_base", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.ReadOnly,
         Description = "Answers open-ended questions from indexed project knowledge, with source citations.",
         ParametersSchema = "{\"question\": \"required question\"}"
     };
@@ -187,5 +187,99 @@ public class AskKnowledgeBaseTool : ICuriaAgentTool
             answer.AnswerText,
             Citations = answer.Citations.Select(c => new { c.Path, Source = c.SourceType.ToString(), c.ProjectId, c.LineHint, c.Excerpt })
         }, answer.Citations.Count == 0 ? "Knowledge-base answer" : $"Knowledge-base answer with {answer.Citations.Count} citations");
+    }
+}
+
+public class GetTasksTool : ICuriaAgentTool
+{
+    private readonly ProjectDiscoveryService _discovery;
+    private readonly TodayQueueService _queue;
+    private readonly AsanaTaskParser _parser;
+
+    public GetTasksTool(ProjectDiscoveryService discovery, TodayQueueService queue, AsanaTaskParser parser)
+        => (_discovery, _queue, _parser) = (discovery, queue, parser);
+
+    public AgentToolDescriptor Descriptor { get; } = new()
+    {
+        Name = "get_tasks", RiskLevel = ToolRiskLevel.ReadOnly,
+        Description = "Gets task references from the prioritized today queue or a project's tasks.md.",
+        ParametersSchema = "{\"scope\":\"required: today_queue|project\",\"project\":\"optional project name; required when scope is project\",\"workstream\":\"optional workstream id\",\"status\":\"optional: in_progress|not_started|completed|collaborating\",\"due_bucket\":\"optional: overdue|today|soon|normal\",\"limit\":\"optional number\"}"
+    };
+
+    public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
+    {
+        var scope = AgentToolArguments.String(arguments, "scope").ToLowerInvariant();
+        var limit = Math.Clamp(arguments["limit"]?.GetValue<int?>() ?? 50, 1, 200);
+        var projects = await _discovery.GetProjectInfoListAsync(ct: ct);
+        if (scope == "today_queue")
+        {
+            var bucket = AgentToolArguments.String(arguments, "due_bucket").ToLowerInvariant();
+            var tasks = await Task.Run(() => _queue.GetAllTasksSorted(projects, limit), ct);
+            if (bucket.Length > 0) tasks = tasks.Where(task => task.DueBucket == bucket).ToList();
+            var references = tasks.Select(task => new AgentTaskReference
+            {
+                TaskId = task.AsanaTaskGid ?? task.SnoozeKey, Source = task.IsLocalOnly ? "local" : "asana",
+                Project = task.ProjectDisplayName, Workstream = task.WorkstreamLabel, Status = "outstanding",
+                Title = task.Title, ParentTitle = task.ParentTitle, Due = task.DueDate?.ToString("yyyy-MM-dd"),
+                DueBucket = task.DueBucket, CanComplete = task.CanComplete
+            });
+            return AgentToolArguments.JsonResult(references, $"{tasks.Count} task references found");
+        }
+        if (scope != "project") return new AgentToolResult { Success = false, Code = "invalid_scope", Content = "scope must be today_queue or project.", DisplaySummary = "Invalid scope" };
+
+        var project = AgentToolArguments.ResolveProject(projects, AgentToolArguments.String(arguments, "project"), out var error);
+        if (project == null) return new AgentToolResult { Success = false, Code = "project_not_found", Content = error!, DisplaySummary = "Project not found" };
+        var requestedWorkstream = AgentToolArguments.String(arguments, "workstream");
+        var requestedStatus = AgentToolArguments.String(arguments, "status").ToLowerInvariant();
+        var paths = new List<(string Workstream, string Path)>();
+        if (requestedWorkstream.Length == 0) paths.Add(("root", Path.Combine(project.AiContextPath, "obsidian_notes", "tasks.md")));
+        paths.AddRange(project.Workstreams.Where(item => !item.IsClosed && (requestedWorkstream.Length == 0 || item.Id.Equals(requestedWorkstream, StringComparison.OrdinalIgnoreCase)))
+            .Select(item => (item.Id, Path.Combine(project.AiContextPath, "obsidian_notes", "workstreams", item.Id, "tasks.md"))));
+        var results = new List<AgentTaskReference>();
+        foreach (var (workstream, path) in paths.Where(item => File.Exists(item.Path)))
+        {
+            var parsed = _parser.ParseFile(path);
+            Add(parsed.InProgress, "in_progress"); Add(parsed.NotStarted, "not_started"); Add(parsed.Completed, "completed"); Add(parsed.Collaborating, "collaborating");
+            void Add(IEnumerable<ParsedAsanaTask> tasks, string status)
+            {
+                if (requestedStatus.Length > 0 && requestedStatus != status) return;
+                results.AddRange(tasks.Select(task => new AgentTaskReference
+                {
+                    TaskId = task.Id ?? "", Source = string.IsNullOrWhiteSpace(task.Id) ? "local" : "asana", Project = project.DisplayName,
+                    Workstream = workstream, Status = status, Title = task.Title, ParentTitle = task.ParentTitle,
+                    Due = task.DueDate, CanComplete = !string.IsNullOrWhiteSpace(task.Id)
+                }));
+            }
+        }
+        return AgentToolArguments.JsonResult(results.Take(limit), $"{results.Count} task references found in {project.DisplayName}");
+    }
+}
+
+public class SearchKnowledgeTool : ICuriaAgentTool
+{
+    private readonly CuriaQueryService _query;
+    public SearchKnowledgeTool(CuriaQueryService query) => _query = query;
+    public AgentToolDescriptor Descriptor { get; } = new()
+    {
+        Name = "search_knowledge", RiskLevel = ToolRiskLevel.ReadOnly,
+        Description = "Searches primary project knowledge and returns source citations without generating an LLM answer.",
+        ParametersSchema = "{\"query\":\"required search text\",\"source_types\":\"optional array: decision|wiki|task|focus|meeting\",\"project\":\"optional project name\",\"limit\":\"optional number\",\"include_content\":\"optional true|false\"}"
+    };
+
+    public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
+    {
+        var query = AgentToolArguments.String(arguments, "query");
+        if (query.Length == 0) return new AgentToolResult { Success = false, Code = "query_required", Content = "query is required.", DisplaySummary = "Query required" };
+        var names = arguments["source_types"] is JsonArray supplied ? supplied.Select(value => value?.GetValue<string>() ?? "") : [];
+        var map = new Dictionary<string, CuriaSourceType>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["decision"] = CuriaSourceType.DecisionLog, ["wiki"] = CuriaSourceType.Wiki, ["task"] = CuriaSourceType.Tasks,
+            ["focus"] = CuriaSourceType.FocusHistory, ["meeting"] = CuriaSourceType.MeetingNotes
+        };
+        if (names.Any(name => !map.ContainsKey(name))) return new AgentToolResult { Success = false, Code = "invalid_source_type", Content = "source_types must contain decision, wiki, task, focus, or meeting.", DisplaySummary = "Invalid source type" };
+        var matches = await _query.SearchSourcesAsync(query, names.Any() ? new CuriaQueryOptions { SourceTypes = names.Select(name => map[name]).ToList() } : null,
+            AgentToolArguments.String(arguments, "project"), arguments["limit"]?.GetValue<int?>() ?? 20,
+            arguments["include_content"]?.GetValue<bool?>() ?? false, ct);
+        return AgentToolArguments.JsonResult(matches, $"{matches.Count} knowledge sources found");
     }
 }

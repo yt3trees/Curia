@@ -125,6 +125,44 @@ public class CuriaQueryService
 
     public void InvalidateCache() => _cacheExpiry = DateTime.MinValue;
 
+    /// <summary>Returns primary-source matches without invoking an LLM.</summary>
+    public async Task<List<CuriaKnowledgeMatch>> SearchSourcesAsync(string query, CuriaQueryOptions? options,
+        string? projectId, int limit, bool includeContent, CancellationToken ct)
+    {
+        var candidates = await GetCandidatesAsync(options, ct);
+        var terms = query.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var matches = candidates.Where(candidate => string.IsNullOrWhiteSpace(projectId)
+                || candidate.ProjectId.Equals(projectId, StringComparison.OrdinalIgnoreCase))
+            .Where(candidate => terms.Length == 0 || terms.All(term =>
+                candidate.Title.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || candidate.Snippet.Contains(term, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(candidate => candidate.LastModified)
+            .Take(Math.Clamp(limit, 1, 100))
+            .ToList();
+
+        var result = new List<CuriaKnowledgeMatch>();
+        foreach (var candidate in matches)
+        {
+            ct.ThrowIfCancellationRequested();
+            string? content = null;
+            if (includeContent)
+            {
+                var adapter = _adapters.FirstOrDefault(item => item.SourceType == candidate.SourceType);
+                if (adapter != null)
+                {
+                    content = await adapter.ReadFullContentAsync(candidate.Path, ct);
+                    if (content.Length > 8_000) content = content[..8_000];
+                }
+            }
+            result.Add(new CuriaKnowledgeMatch
+            {
+                Path = candidate.Path, SourceType = candidate.SourceType, ProjectId = candidate.ProjectId,
+                Title = candidate.Title, Excerpt = candidate.Snippet, LastModified = candidate.LastModified, Content = content
+            });
+        }
+        return result;
+    }
+
     // ---- Stage 1: file selection ----
 
     private async Task<List<string>> SelectFilesAsync(

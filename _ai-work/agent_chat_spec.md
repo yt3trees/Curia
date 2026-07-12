@@ -22,10 +22,9 @@ Phase A / Phase B の基盤実装と、Phase C の主要機能は完了してい
 チャット UI から自然文で指示すると、AI エージェントが Curia の各サービスを「ツール」として呼び出し、データ取得・操作を代行する機能。
 
 例:
-- 「今日やるべきタスクを整理して」→ get_today_tasks + get_schedule を呼び、優先順位付きで回答
-- 「Alpha プロジェクトの DB 方針の決定事項を教えて」→ search_decision_logs で検索して引用付き回答
+- 「今日やるべきタスクを整理して」→ get_tasks + get_schedule を呼び、優先順位付きで回答
+- 「Alpha プロジェクトの DB 方針の決定事項を教えて」→ search_knowledge で一次資料を検索して引用付き回答
 - 「"見積レビュー" というタスクを Alpha に明日期限で追加して」→ create_task を提案 → ユーザー承認 → 実行
-- 「今週のスタンドアップを作り直して」→ generate_standup 実行
 
 ## コンセプト
 
@@ -223,19 +222,12 @@ public interface ICuriaAgentTool
 | ツール名 | 内容 | 流用サービス |
 |---|---|---|
 | list_projects | プロジェクト一覧 (名前 / tier / category / focus 経過日数 / 未コミット有無) | ProjectDiscoveryService |
-| get_today_tasks | 今日のタスクキュー (overdue / today / soon / normal バケット指定可) | TodayQueueService |
-| get_project_tasks | 指定プロジェクトの tasks.md をパースして返す (workstream / 完了フラグでフィルタ) | AsanaTaskParser |
-| read_current_focus | 指定プロジェクトの current_focus.md 全文 | ContextCompressionLayerService |
-| read_project_summary | 指定プロジェクトの project_summary.md 全文 | ContextCompressionLayerService |
-| search_decision_logs | 決定ログをキーワード / プロジェクト / 期間で検索 | DecisionLogService |
-| ask_knowledge_base | 横断 QA (Ask Curia をそのまま 1 ツール化)。曖昧な知識質問はこれに委譲 | CuriaQueryService |
-| search_wiki | Wiki ページの検索・取得 | WikiService / WikiQueryService |
+| get_tasks | today queue または指定プロジェクトのタスクを共通参照形式で取得 | TodayQueueService / AsanaTaskParser |
+| get_project_context | current focus / summary / open issues をまとめて取得 | FileEncodingService |
+| search_knowledge | 決定、Wiki、タスク、focus、meeting の一次資料を検索 | CuriaQueryService |
 | get_schedule | 今日 / 今週の予定 (カレンダー連携済みイベント) | ScheduleService / OutlookCalendarService |
 | get_team_tasks | チームメンバー別タスク一覧 | TeamTaskParser |
-| get_standup | 最新の生成済みスタンドアップを読む | StandupGeneratorService |
-| get_state_snapshot | curator_state.json 相当の全体状態 (プロジェクト + タスクの俯瞰) | StateSnapshotService |
-| read_file | マネージドルート内の任意ファイル読み取り (D3 ガード付き) | FileEncodingService |
-| get_open_issues | 指定プロジェクトの open_issues.md | (glob + FileEncodingService) |
+| read_managed_file | マネージドルート内の任意ファイルをサイズ・offset制限付きで取得 | FileEncodingService |
 
 ### 書き込み系 (Write、承認カード必須) - Phase B で実装
 
@@ -247,16 +239,13 @@ public interface ICuriaAgentTool
 | append_decision_log | 決定ログのドラフト生成と追記 | DecisionLogGeneratorService |
 | append_to_file | マネージドルート内の Markdown への追記 (D3 ガード付き) | FileEncodingService |
 | sync_asana | Asana 同期を今すぐ実行 | AsanaSyncService |
-| generate_standup | スタンドアップを再生成 | StandupGeneratorService |
 
 ### UI 操作系 (ReadOnly 扱い、副作用は画面遷移のみ) - Phase B で実装
 
 | ツール名 | 内容 | 実現方法 |
 |---|---|---|
 | open_in_editor | 指定ファイルを Editor ページで開く | OnOpenInEditor コールバック (D4) |
-| open_in_timeline | 指定プロジェクトを Timeline で開く | OnOpenInTimeline コールバック |
-| navigate_to_page | Dashboard / Wiki / Schedule 等へ遷移 | MainWindowViewModel 経由 |
-| start_pomodoro | ポモドーロ開始 (タスク名指定可) | PomodoroService |
+| navigate_to_page | Dashboard / Wiki / Schedule 等へ遷移。Timelineは任意のprojectを受ける | MainWindowViewModel 経由 |
 
 ### 初期リリースで登録しないもの (Dangerous)
 
@@ -407,7 +396,7 @@ Available tools:
 ### Phase B: 操作エージェント
 
 - 承認カード実装
-- 書き込み系: create_task / capture_note / append_to_file / generate_standup
+- 書き込み系: create_task / capture_inbox_note / append_to_file / sync_asana
 - UI 操作系: open_in_editor / navigate_to_page
 - 残りの読み取り系ツール追加 (schedule / team / wiki / snapshot / read_file)
 - セッション永続化
@@ -418,7 +407,7 @@ Available tools:
 - [x] `update_current_focus` / `append_decision_log` を Agent ツールとして統合。Agent 承認後にも `ProposalReviewDialog` による最終レビューを要求する。
 - [x] セッション履歴の一覧・再開・削除。
 - [x] `openai` / `azure_openai` のネイティブ function calling。CLI プロバイダはプロンプトベース JSON を継続利用する。
-- [x] 固定プリセット "Morning preparation"。schedule / today tasks / standup を収集する指示を Agent Chat に送信する。
+- [x] 固定プリセット "Morning preparation"。schedule / today tasks を収集する指示を Agent Chat に送信する。
 - [x] Asana タスクの完了化。承認後に完了し、15 分間有効なアプリ内 Undo token で未完了に戻せる。
 
 制約:
@@ -470,14 +459,13 @@ Available tools:
 |---|---|---|---|
 | 1 | [x] 承認カード基盤: Kind=Approval メッセージ + Approve/Reject コマンド + TaskCompletionSource 橋渡し | ViewModels/ + Views/Pages/ | 150 行 |
 | 2 | [x] 「このセッション中は同種ツールを自動承認」トグル (セッション内辞書で管理、永続化しない) | ViewModels/ | 40 行 |
-| 3 | [~] パスガード共通実装 (マネージドルート判定 / `..` 拒否 / junction 解決) | Services/Agent/AgentPathGuard.cs | 100 行 |
+| 3 | [x] パスガード共通実装 (マネージドルート判定 / `..` 拒否 / junction 実体path照合) | Services/Agent/AgentPathGuard.cs | 100 行 |
 | 4 | [x] 書き込みツール: create_task (CaptureService 委譲、dedup ガード継承) | Services/Agent/Tools/ | 80 行 |
 | 5 | [~] 書き込みツール: capture_note (現状はグローバル capture_log.md へ追記) | Services/Agent/Tools/ | 60 行 |
 | 6 | [x] 書き込みツール: append_to_file (パスガード + FileEncodingService でエンコーディング維持) | Services/Agent/Tools/ | 80 行 |
-| 7 | [x] 書き込みツール: generate_standup / sync_asana | Services/Agent/Tools/ | 2 × 50 = 100 行 |
-| 8 | [x] UI 操作ツール: open_in_editor / open_in_timeline / navigate_to_page (コールバック委譲 + UI スレッドディスパッチ) | Services/Agent/Tools/ | 120 行 |
-| 9 | [x] UI 操作ツール: start_pomodoro | Services/Agent/Tools/ | 40 行 |
-| 10 | [~] 残りの読み取りツール: get_schedule / get_team_tasks / search_wiki / get_state_snapshot / read_file / read_current_focus / read_project_summary / get_open_issues / get_standup | Services/Agent/Tools/ | 9 × 60 = 540 行 |
+| 7 | [x] 書き込みツール: sync_asana | Services/Agent/Tools/ | 50 行 |
+| 8 | [x] UI 操作ツール: open_in_editor / navigate_to_page (コールバック委譲 + UI スレッドディスパッチ) | Services/Agent/Tools/ | 80 行 |
+| 10 | [x] 統合読み取りツール: get_tasks / search_knowledge / get_project_context / read_managed_file | Services/Agent/Tools/ | - |
 | 11 | [x] セッション永続化 (`%CONFIG%/agent_chat_history/`、User/Assistant/ToolCall 要約のみ保存) | Services/Agent/ | 120 行 |
 | 12 | [x] `?` プレフィックスの導線置き換え: 入力を引き継いで AgentChatPage へ遷移 + 自動送信 (D6 Step 2) | CommandPaletteViewModel / Overlay | 80 行 |
 | 13 | [~] 旧 AskMode UI の削除 (D6 Step 3: AskMode プロパティ / 回答パネル / 引用クリック処理) | CommandPaletteViewModel / Overlay | -200 行 |

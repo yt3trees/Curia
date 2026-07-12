@@ -7,9 +7,29 @@ namespace Curia.Models;
 
 public enum ToolRiskLevel { ReadOnly, Write, Dangerous }
 
+[Flags]
+public enum AgentToolCapability
+{
+    None = 0,
+    Asana = 1,
+    UiNavigation = 2,
+    UiReview = 4,
+    ManagedRoots = 8,
+}
+
 public class AgentToolDescriptor
 {
     public string Name { get; set; } = "";
+    /// <summary>Stable name used by new callers. Defaults to <see cref="Name"/> for existing tools.</summary>
+    public string CanonicalName { get; set; } = "";
+    /// <summary>Legacy execution names accepted without advertising them to models.</summary>
+    public IReadOnlyList<string> Aliases { get; set; } = [];
+    /// <summary>Whether this tool is sent to providers and displayed in the Tools panel.</summary>
+    public bool IsAdvertised { get; set; } = true;
+    /// <summary>Optional version/date note for a legacy tool that is no longer advertised.</summary>
+    public string? DeprecatedSince { get; set; }
+    /// <summary>Runtime capabilities required before the tool can be advertised.</summary>
+    public AgentToolCapability CapabilityRequirements { get; set; }
     public string Description { get; set; } = "";
     public string ParametersSchema { get; set; } = "{}";
     public ToolRiskLevel RiskLevel { get; set; }
@@ -25,8 +45,11 @@ public class AgentToolCall
 public class AgentToolResult
 {
     public bool Success { get; set; }
+    public string Code { get; set; } = "ok";
     public string Content { get; set; } = "";
     public string? DisplaySummary { get; set; }
+    public bool Truncated { get; set; }
+    public string? NextCursor { get; set; }
 }
 
 /// <summary>OpenAI/Azure OpenAI の native function call をプロバイダー非依存で表す。</summary>
@@ -80,4 +103,18 @@ public partial class AgentChatMessage : ObservableObject
     public string ToolArgumentsDisplay => ToolCall?.Arguments.ToJsonString(ToolArgumentsDisplayOptions) ?? "";
 
     partial void OnIsApprovalResolvedChanged(bool value) => OnPropertyChanged(nameof(IsApprovalPending));
+}
+
+public class AgentTaskReference
+{
+    public string TaskId { get; set; } = "";
+    public string Source { get; set; } = "";
+    public string Project { get; set; } = "";
+    public string? Workstream { get; set; }
+    public string Status { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string? ParentTitle { get; set; }
+    public string? Due { get; set; }
+    public string? DueBucket { get; set; }
+    public bool CanComplete { get; set; }
 }

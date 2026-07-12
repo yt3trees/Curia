@@ -36,7 +36,7 @@ public class SearchWikiTool : ICuriaAgentTool
 {
     private readonly WikiService _wiki; private readonly ConfigService _config;
     public SearchWikiTool(WikiService wiki, ConfigService config) => (_wiki, _config) = (wiki, config);
-    public AgentToolDescriptor Descriptor { get; } = new() { Name = "search_wiki", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Searches titles and content of the managed wiki.", ParametersSchema = "{\"query\":\"required search text\",\"limit\":\"optional number\"}" };
+    public AgentToolDescriptor Descriptor { get; } = new() { Name = "search_wiki", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Searches titles and content of the managed wiki.", ParametersSchema = "{\"query\":\"required search text\",\"limit\":\"optional number\"}" };
     public Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
     {
         var query = AgentToolArguments.String(arguments, "query");
@@ -52,7 +52,7 @@ public class GetStateSnapshotTool : ICuriaAgentTool
 {
     private readonly ProjectDiscoveryService _discovery; private readonly StateSnapshotService _snapshot;
     public GetStateSnapshotTool(ProjectDiscoveryService discovery, StateSnapshotService snapshot) => (_discovery, _snapshot) = (discovery, snapshot);
-    public AgentToolDescriptor Descriptor { get; } = new() { Name = "get_state_snapshot", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Gets a complete current project and task state snapshot.", ParametersSchema = "{}" };
+    public AgentToolDescriptor Descriptor { get; } = new() { Name = "get_state_snapshot", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Gets a complete current project and task state snapshot.", ParametersSchema = "{}" };
     public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct) => AgentToolArguments.JsonResult(await _snapshot.BuildAsync(await _discovery.GetProjectInfoListAsync(ct: ct), ct), "State snapshot created");
 }
 
@@ -73,34 +73,72 @@ public abstract class ProjectFileToolBase : ICuriaAgentTool
     }
 }
 
+public class GetProjectContextTool : ICuriaAgentTool
+{
+    private static readonly string[] DefaultSections = ["focus", "summary", "open_issues"];
+    private readonly ProjectDiscoveryService _discovery;
+    private readonly FileEncodingService _files;
+
+    public GetProjectContextTool(ProjectDiscoveryService discovery, FileEncodingService files) => (_discovery, _files) = (discovery, files);
+
+    public AgentToolDescriptor Descriptor { get; } = new()
+    {
+        Name = "get_project_context",
+        RiskLevel = ToolRiskLevel.ReadOnly,
+        Description = "Reads one or more project context documents: focus, summary, and open_issues.",
+        ParametersSchema = "{\"project\":\"required project name\",\"sections\":\"optional array: focus|summary|open_issues; defaults to all\"}"
+    };
+
+    public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
+    {
+        var project = AgentToolArguments.ResolveProject(await _discovery.GetProjectInfoListAsync(ct: ct), AgentToolArguments.String(arguments, "project"), out var error);
+        if (project == null) return new AgentToolResult { Success = false, Content = error!, DisplaySummary = "Project not found" };
+
+        var sections = arguments["sections"] is JsonArray suppliedSections
+            ? suppliedSections.Select(value => value?.GetValue<string>() ?? "").ToArray()
+            : DefaultSections;
+        if (sections.Length == 0 || sections.Any(section => !DefaultSections.Contains(section, StringComparer.OrdinalIgnoreCase)))
+            return new AgentToolResult { Success = false, Content = "sections must contain one or more of: focus, summary, open_issues.", DisplaySummary = "Invalid sections" };
+
+        var documents = new JsonObject();
+        foreach (var section in sections.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var path = section.ToLowerInvariant() switch
+            {
+                "focus" => project.FocusFile,
+                "summary" => project.SummaryFile,
+                "open_issues" => Path.Combine(project.AiContextContentPath, "open_issues.md"),
+                _ => null
+            };
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                documents[section] = new JsonObject { ["found"] = false };
+                continue;
+            }
+
+            var (content, _) = await _files.ReadFileAsync(path, ct);
+            documents[section] = new JsonObject { ["found"] = true, ["path"] = path, ["content"] = content };
+        }
+
+        return AgentToolArguments.JsonResult(new { Project = project.DisplayName, Sections = documents }, "Project context read");
+    }
+}
+
 public class ReadCurrentFocusTool : ProjectFileToolBase
 {
     public ReadCurrentFocusTool(ProjectDiscoveryService discovery, FileEncodingService files) : base(discovery, files) { }
-    public override AgentToolDescriptor Descriptor { get; } = new() { Name = "read_current_focus", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Reads a project's current_focus.md.", ParametersSchema = "{\"project\":\"required project name\"}" };
+    public override AgentToolDescriptor Descriptor { get; } = new() { Name = "read_current_focus", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Reads a project's current_focus.md.", ParametersSchema = "{\"project\":\"required project name\"}" };
     protected override string? Resolve(ProjectInfo project) => project.FocusFile;
 }
 public class ReadProjectSummaryTool : ProjectFileToolBase
 {
     public ReadProjectSummaryTool(ProjectDiscoveryService discovery, FileEncodingService files) : base(discovery, files) { }
-    public override AgentToolDescriptor Descriptor { get; } = new() { Name = "read_project_summary", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Reads a project's project_summary.md.", ParametersSchema = "{\"project\":\"required project name\"}" };
+    public override AgentToolDescriptor Descriptor { get; } = new() { Name = "read_project_summary", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Reads a project's project_summary.md.", ParametersSchema = "{\"project\":\"required project name\"}" };
     protected override string? Resolve(ProjectInfo project) => project.SummaryFile;
 }
 public class GetOpenIssuesTool : ProjectFileToolBase
 {
     public GetOpenIssuesTool(ProjectDiscoveryService discovery, FileEncodingService files) : base(discovery, files) { }
-    public override AgentToolDescriptor Descriptor { get; } = new() { Name = "get_open_issues", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Reads a project's open_issues.md.", ParametersSchema = "{\"project\":\"required project name\"}" };
+    public override AgentToolDescriptor Descriptor { get; } = new() { Name = "get_open_issues", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Reads a project's open_issues.md.", ParametersSchema = "{\"project\":\"required project name\"}" };
     protected override string? Resolve(ProjectInfo project) => Path.Combine(project.AiContextContentPath, "open_issues.md");
-}
-public class GetStandupTool : ICuriaAgentTool
-{
-    private readonly StandupGeneratorService _standup; private readonly FileEncodingService _files;
-    public GetStandupTool(StandupGeneratorService standup, FileEncodingService files) => (_standup, _files) = (standup, files);
-    public AgentToolDescriptor Descriptor { get; } = new() { Name = "get_standup", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Reads today's generated standup.", ParametersSchema = "{}" };
-    public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
-    {
-        var path = _standup.GetTodayStandupPath();
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return new AgentToolResult { Success = false, Content = "Today's standup was not found.", DisplaySummary = "Standup not found" };
-        var (content, _) = await _files.ReadFileAsync(path, ct);
-        return AgentToolArguments.JsonResult(new { Path = path, Content = content }, "Standup read");
-    }
 }

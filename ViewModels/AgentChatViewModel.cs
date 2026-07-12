@@ -24,7 +24,7 @@ public partial class AgentChatViewModel : ObservableObject
 
     public ObservableCollection<AgentChatMessage> Messages { get; } = [];
     public ObservableCollection<AgentChatSessionSummary> Sessions { get; } = [];
-    public IReadOnlyList<AgentToolDescriptor> Tools { get; }
+    public ObservableCollection<AgentToolDescriptor> Tools { get; } = [];
 
     [ObservableProperty] private string inputText = "";
     [ObservableProperty] private bool isRunning;
@@ -45,6 +45,8 @@ public partial class AgentChatViewModel : ObservableObject
         }
     }
 
+    public int ToolCount => Tools.Count;
+
     public AgentChatViewModel(AgentOrchestratorService orchestrator, ConfigService config, AgentToolRegistry toolRegistry,
         AgentChatHistoryService historyService)
     {
@@ -52,7 +54,7 @@ public partial class AgentChatViewModel : ObservableObject
         _config = config;
         _toolRegistry = toolRegistry;
         _historyService = historyService;
-        Tools = _toolRegistry.GetDescriptors();
+        RefreshTools();
         IsAiEnabled = config.LoadSettings().AiEnabled;
         WeakReferenceMessenger.Default.Register<AiEnabledChangedMessage>(this,
             (_, message) =>
@@ -74,6 +76,13 @@ public partial class AgentChatViewModel : ObservableObject
     {
         IsAiEnabled = _config.LoadSettings().AiEnabled;
         OnPropertyChanged(nameof(CanUseAgent));
+    }
+
+    public void RefreshTools()
+    {
+        Tools.Clear();
+        foreach (var tool in _toolRegistry.GetDescriptors()) Tools.Add(tool);
+        OnPropertyChanged(nameof(ToolCount));
     }
 
     public async Task InitializeAsync()
@@ -162,7 +171,11 @@ public partial class AgentChatViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ToggleToolsPanel() => IsToolsPanelVisible = !IsToolsPanelVisible;
+    private void ToggleToolsPanel()
+    {
+        if (!IsToolsPanelVisible) RefreshTools();
+        IsToolsPanelVisible = !IsToolsPanelVisible;
+    }
 
     [RelayCommand]
     private async Task ToggleHistoryPanelAsync()
@@ -203,7 +216,7 @@ public partial class AgentChatViewModel : ObservableObject
 
     [RelayCommand]
     private async Task RunMorningPreparationAsync()
-        => await SubmitAsync("Prepare my morning briefing. Check today's schedule, my today task queue, and the latest standup. Summarize the priorities and any conflicts.");
+        => await SubmitAsync("Prepare my morning briefing. Check today's schedule and my today task queue. Summarize priorities and any conflicts.");
 
     private async Task RefreshSessionsAsync()
     {

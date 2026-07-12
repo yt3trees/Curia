@@ -111,8 +111,8 @@ public class AgentChatHistoryService
                 {
                     Kind = message.Kind,
                     Text = message.Text,
-                    ToolCall = message.ToolCall,
-                    ToolResultContent = message.ToolResultContent,
+                    ToolCall = message.ToolCall == null ? null : new AgentToolCall { Tool = message.ToolCall.Tool },
+                    ToolResultContent = "",
                     Timestamp = message.Timestamp
                 }).ToList();
             var session = new AgentChatHistorySession

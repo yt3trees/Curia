@@ -39,26 +39,31 @@ public class AgentPathGuard
             error = "Access denied: path is outside managed roots.";
             return false;
         }
-
-        // Do not follow junctions or symbolic links. Rejecting them is deliberate: resolving
-        // arbitrary reparse points leaves a TOCTOU gap between validation and file access.
-        if (ContainsReparsePoint(resolvedPath, out var reparsePath))
+        try
         {
-            error = $"Access denied: symbolic links and junctions are not allowed ({reparsePath}).";
+            var physicalRoots = roots.Select(ResolveExistingReparsePoints).ToList();
+            var physicalPath = ResolveExistingReparsePoints(resolvedPath);
+            if (!physicalRoots.Any(root => IsWithinRoot(physicalPath, root)))
+            {
+                error = "Access denied: resolved path is outside managed roots.";
+                return false;
+            }
+            fullPath = physicalPath;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            error = $"Access denied: could not resolve symbolic link or junction ({ex.Message}).";
             return false;
         }
-
-        fullPath = resolvedPath;
         return true;
     }
 
     public bool Revalidate(string fullPath, out string error) => TryResolve(fullPath, out _, out error);
 
-    private static bool ContainsReparsePoint(string fullPath, out string reparsePath)
+    private static string ResolveExistingReparsePoints(string fullPath)
     {
-        reparsePath = "";
         var root = Path.GetPathRoot(fullPath);
-        if (string.IsNullOrWhiteSpace(root)) return false;
+        if (string.IsNullOrWhiteSpace(root)) return fullPath;
         var current = root;
         var remainder = fullPath[root.Length..];
         foreach (var segment in remainder.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar,
@@ -66,19 +71,14 @@ public class AgentPathGuard
         {
             current = Path.Combine(current, segment);
             if (!File.Exists(current) && !Directory.Exists(current)) continue;
-            try
-            {
-                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) == 0) continue;
-                reparsePath = current;
-                return true;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                reparsePath = current;
-                return true;
-            }
+            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) == 0) continue;
+            var target = Directory.Exists(current)
+                ? new DirectoryInfo(current).ResolveLinkTarget(returnFinalTarget: true)
+                : new FileInfo(current).ResolveLinkTarget(returnFinalTarget: true);
+            if (target == null) throw new IOException($"Unable to resolve {current}.");
+            current = target.FullName;
         }
-        return false;
+        return Path.GetFullPath(current);
     }
 
     private static bool IsWithinRoot(string path, string root)
