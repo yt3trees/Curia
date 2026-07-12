@@ -4,12 +4,14 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Curia.Models;
 using Curia.ViewModels;
+using Curia.Views.Pages;
 using WpfBrush = System.Windows.Media.Brush;
 using WpfBrushes = System.Windows.Media.Brushes;
 using WpfKeyEventArgs = System.Windows.Input.KeyEventArgs;
 using WpfListBox = System.Windows.Controls.ListBox;
 using WpfListBoxItem = System.Windows.Controls.ListBoxItem;
 using System.ComponentModel;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Curia.Views;
 
@@ -85,6 +87,16 @@ public class CommandPaletteWindow : Window
         {
             _canCloseOnDeactivate = false;
             _mainWindow.NavigateToEditorAndOpenFile(project, filePath);
+            _mainWindow.BringToFront();
+            Close();
+        };
+
+        _viewModel.OnAskAgent = question =>
+        {
+            _canCloseOnDeactivate = false;
+            _mainWindow.RootNavigation.Navigate(typeof(AgentChatPage));
+            var agent = ((App)Application.Current).Services.GetRequiredService<AgentChatViewModel>();
+            _ = agent.SubmitAsync(question);
             _mainWindow.BringToFront();
             Close();
         };
@@ -509,7 +521,7 @@ public class CommandPaletteWindow : Window
                 }
                 break;
             case Key.Enter:
-                if (_viewModel.IsAskMode && !_viewModel.IsAskLoading)
+                if (_searchBox.Text.StartsWith("?") && !_viewModel.IsAskLoading)
                 {
                     _ = _viewModel.AskAsync(_searchBox.Text);
                     e.Handled = true;

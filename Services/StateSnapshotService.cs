@@ -29,6 +29,9 @@ public class StateSnapshotService
         return Task.Run(() => ExportCore(projects), ct);
     }
 
+    public Task<CuratorStateSnapshot> BuildAsync(List<ProjectInfo> projects, CancellationToken ct = default)
+        => Task.Run(() => BuildSnapshot(projects, _configService.LoadSettings()), ct);
+
     private void ExportCore(List<ProjectInfo> projects)
     {
         try

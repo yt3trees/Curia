@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Curia.ViewModels;
+using Curia.Services.Agent;
 using Wpf.Ui.Controls;
 using WpfUserControl = System.Windows.Controls.UserControl;
 
@@ -11,12 +12,32 @@ public partial class AgentChatPage : WpfUserControl, INavigableView<AgentChatVie
 {
     public AgentChatViewModel ViewModel { get; }
 
-    public AgentChatPage(AgentChatViewModel viewModel)
+    private readonly AgentUiActions _uiActions;
+
+    public AgentChatPage(AgentChatViewModel viewModel, AgentUiActions uiActions)
     {
         ViewModel = viewModel;
+        _uiActions = uiActions;
         DataContext = ViewModel;
         InitializeComponent();
         ViewModel.Messages.CollectionChanged += OnMessagesChanged;
+        _uiActions.OpenInEditorAsync = async (project, path) => await Dispatcher.InvokeAsync(() =>
+        {
+            if (System.Windows.Window.GetWindow(this) is MainWindow window) window.NavigateToEditorAndOpenFile(project, path);
+        });
+        _uiActions.OpenInTimelineAsync = async project => await Dispatcher.InvokeAsync(() =>
+        {
+            if (System.Windows.Window.GetWindow(this) is MainWindow window) window.NavigateToTimeline(project);
+        });
+        _uiActions.NavigateAsync = async page => await Dispatcher.InvokeAsync(() =>
+        {
+            if (System.Windows.Window.GetWindow(this) is not MainWindow window) return;
+            window.RootNavigation.Navigate(page switch
+            {
+                "dashboard" => typeof(DashboardPage), "wiki" => typeof(WikiPage), "schedule" => typeof(WeeklySchedulePage),
+                "editor" => typeof(EditorPage), "timeline" => typeof(TimelinePage), _ => typeof(SettingsPage)
+            });
+        });
     }
 
     private void OnInputKeyDown(object sender, System.Windows.Input.KeyEventArgs e)

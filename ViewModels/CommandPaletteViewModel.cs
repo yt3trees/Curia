@@ -60,6 +60,7 @@ public partial class CommandPaletteViewModel : ObservableObject
 
     /// <summary>引用クリック時にエディタで開く。設定しない場合はクリップボードコピーにフォールバック。</summary>
     public Action<ProjectInfo, string>? OnOpenInEditor { get; set; }
+    public Action<string>? OnAskAgent { get; set; }
 
     private List<CommandItem> _allCommands = [];
     private DateTime _commandsBuiltTime = DateTime.MinValue;
@@ -157,9 +158,10 @@ public partial class CommandPaletteViewModel : ObservableObject
             IsAskLoading = false;
         }
 
-        if (value.StartsWith("?") && IsAiEnabled)
+        if (value.StartsWith("?"))
         {
-            IsAskMode = true;
+            // Ask Curia UI is replaced by the Agent Chat handoff in CommandPaletteWindow.
+            IsAskMode = false;
             FilteredCommands.Clear();
             SelectedCommand = null;
             return;
@@ -173,6 +175,12 @@ public partial class CommandPaletteViewModel : ObservableObject
     {
         var question = rawQuestion.TrimStart('?').Trim();
         if (string.IsNullOrWhiteSpace(question)) return;
+
+        if (OnAskAgent != null)
+        {
+            OnAskAgent(question);
+            return;
+        }
 
         _askCts?.Cancel();
         _askCts = new CancellationTokenSource();

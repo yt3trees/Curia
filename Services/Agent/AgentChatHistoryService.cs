@@ -10,8 +10,11 @@ public class AgentChatHistoryService
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
     private string? _currentSessionPath;
+    private readonly ConfigService _configService;
 
-    public string HistoryDirectory => Path.Combine(Path.GetTempPath(), "Curia", "agent_chat_history");
+    public AgentChatHistoryService(ConfigService configService) => _configService = configService;
+
+    public string HistoryDirectory => Path.Combine(_configService.ConfigDir, "agent_chat_history");
 
     public async Task<List<AgentChatMessage>> LoadLatestSessionAsync(CancellationToken ct = default)
     {

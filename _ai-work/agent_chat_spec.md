@@ -1,5 +1,19 @@
 # Curia AI エージェントチャット - 仕様案
 
+## 実装状況 (2026-07-12)
+
+Phase A と Phase B の基盤実装は完了している。ビルドおよび single-file publish は成功済み。
+
+- Markdig.Wpf を導入し、アシスタント回答を Markdown として描画する。
+- 書き込みツールにはチャット内の Approve / Reject カードを表示する。同一ツールのセッション内自動承認も利用できる。
+- セッションは `%CONFIG%/agent_chat_history/` へ保存する。User / Assistant / ToolCall のみを保存し、ToolResult 全文は保存しない。
+- Agent Chat を開くと最新セッションを自動復元する。仕様上の「起動時は新規セッション」とは異なる現行動作であり、履歴一覧・任意セッション再開は Phase C で扱う。
+- Command Palette の `?` 入力は Agent Chat へ遷移して自動送信する。旧 Ask Curia の表示経路は利用しないが、旧 UI 関連コードの物理削除と `CuriaQueryService` の UI 専用 API 整理は未完了。
+- パスガードは管理ルート、`..`、ルート境界を検証する。junction / symbolic link の実体解決による逸脱検出は追加対応が必要。
+- `capture_note` は現在グローバル `capture_log.md` への追記であり、プロジェクト固有ファイルへのルーティングは未実装。
+- `get_schedule` は Curia の手動スケジュールブロックを返す。Outlook / ICS イベントの統合は未実装。
+- `search_wiki` は現状 Wiki タイトル検索として実装している。ページ本文を含む検索・WikiQueryService 連携は追加対応が必要。
+
 チャット UI から自然文で指示すると、AI エージェントが Curia の各サービスを「ツール」として呼び出し、データ取得・操作を代行する機能。
 
 例:
@@ -342,7 +356,7 @@ Available tools:
 
 - `%CONFIG%/agent_chat_history/{yyyy-MM-dd_HHmmss}.json` に保存
 - 保存対象は User / Assistant / ToolCall (引数と要約のみ)。ツール結果全文は保存しない (サイズ抑制)
-- 起動時は新規セッション。履歴一覧からの再開は Phase C
+- 現行実装は起動時に最新セッションを自動復元する。履歴一覧からの任意セッション再開は Phase C
 
 ---
 
@@ -415,9 +429,9 @@ Available tools:
 | 5 | [x] 読み取りツール 5 種 | Services/Agent/Tools/ | 5 × 60 = 300 行 |
 | 6 | [x] Agent Compatibility Check (プローブ実行 + settings 保存) | Services/Agent/ + SettingsViewModel | 120 行 |
 | 7 | [x] Settings 画面に "Test Agent Compatibility" ボタン追加 | Views/Pages/SettingsPage | 40 行 |
-| 8 | Markdig.Wpf 導入 (NuGet 追加はユーザー承認後) + ダークテーマ用スタイル辞書 | Assets/ + csproj | 100 行 |
+| 8 | [x] Markdig.Wpf 導入 (NuGet 追加はユーザー承認後) + ダークテーマ対応 | Assets/ + csproj | 100 行 |
 | 9 | [x] AgentChatViewModel | ViewModels/ | 200 行 |
-| 10 | AgentChatPage (XAML + code-behind、Markdown 吹き出し + ツール折りたたみ行) | Views/Pages/ | 300 行 |
+| 10 | [x] AgentChatPage (XAML + code-behind、Markdown 吹き出し + ツール折りたたみ行) | Views/Pages/ | 300 行 |
 | 11 | [x] App.xaml.cs DI 登録 + NavigationView 項目追加 | - | 30 行 |
 | 12 | [x] AiEnabled + AgentCompatibilityOk ガード / メッセージ購読 | - | 30 行 |
 | 13 | 手動テスト (下記チェックリスト) | - | - |
@@ -444,20 +458,20 @@ Available tools:
 
 | # | タスク | 対象 | 目安 |
 |---|---|---|---|
-| 1 | 承認カード基盤: Kind=Approval メッセージ + Approve/Reject コマンド + TaskCompletionSource 橋渡し | ViewModels/ + Views/Pages/ | 150 行 |
-| 2 | 「このセッション中は同種ツールを自動承認」トグル (セッション内辞書で管理、永続化しない) | ViewModels/ | 40 行 |
-| 3 | パスガード共通実装 (マネージドルート判定 / `..` 拒否 / junction 解決) | Services/Agent/AgentPathGuard.cs | 100 行 |
-| 4 | 書き込みツール: create_task (CaptureService 委譲、dedup ガード継承) | Services/Agent/Tools/ | 80 行 |
-| 5 | 書き込みツール: capture_note | Services/Agent/Tools/ | 60 行 |
-| 6 | 書き込みツール: append_to_file (パスガード + FileEncodingService でエンコーディング維持) | Services/Agent/Tools/ | 80 行 |
-| 7 | 書き込みツール: generate_standup / sync_asana | Services/Agent/Tools/ | 2 × 50 = 100 行 |
-| 8 | UI 操作ツール: open_in_editor / open_in_timeline / navigate_to_page (コールバック委譲 + UI スレッドディスパッチ) | Services/Agent/Tools/ | 120 行 |
-| 9 | UI 操作ツール: start_pomodoro | Services/Agent/Tools/ | 40 行 |
-| 10 | 残りの読み取りツール: get_schedule / get_team_tasks / search_wiki / get_state_snapshot / read_file / read_current_focus / read_project_summary / get_open_issues / get_standup | Services/Agent/Tools/ | 9 × 60 = 540 行 |
-| 11 | セッション永続化 (`%CONFIG%/agent_chat_history/`、User/Assistant/ToolCall 要約のみ保存) | Services/Agent/ | 120 行 |
-| 12 | `?` プレフィックスの導線置き換え: 入力を引き継いで AgentChatPage へ遷移 + 自動送信 (D6 Step 2) | CommandPaletteViewModel / Overlay | 80 行 |
-| 13 | 旧 AskMode UI の削除 (D6 Step 3: AskMode プロパティ / 回答パネル / 引用クリック処理) | CommandPaletteViewModel / Overlay | -200 行 |
-| 14 | CuriaQueryService の UI 専用 API 整理 (D6 Step 4) | Services/ | 30 行 |
+| 1 | [x] 承認カード基盤: Kind=Approval メッセージ + Approve/Reject コマンド + TaskCompletionSource 橋渡し | ViewModels/ + Views/Pages/ | 150 行 |
+| 2 | [x] 「このセッション中は同種ツールを自動承認」トグル (セッション内辞書で管理、永続化しない) | ViewModels/ | 40 行 |
+| 3 | [~] パスガード共通実装 (マネージドルート判定 / `..` 拒否 / junction 解決) | Services/Agent/AgentPathGuard.cs | 100 行 |
+| 4 | [x] 書き込みツール: create_task (CaptureService 委譲、dedup ガード継承) | Services/Agent/Tools/ | 80 行 |
+| 5 | [~] 書き込みツール: capture_note (現状はグローバル capture_log.md へ追記) | Services/Agent/Tools/ | 60 行 |
+| 6 | [x] 書き込みツール: append_to_file (パスガード + FileEncodingService でエンコーディング維持) | Services/Agent/Tools/ | 80 行 |
+| 7 | [x] 書き込みツール: generate_standup / sync_asana | Services/Agent/Tools/ | 2 × 50 = 100 行 |
+| 8 | [x] UI 操作ツール: open_in_editor / open_in_timeline / navigate_to_page (コールバック委譲 + UI スレッドディスパッチ) | Services/Agent/Tools/ | 120 行 |
+| 9 | [x] UI 操作ツール: start_pomodoro | Services/Agent/Tools/ | 40 行 |
+| 10 | [~] 残りの読み取りツール: get_schedule / get_team_tasks / search_wiki / get_state_snapshot / read_file / read_current_focus / read_project_summary / get_open_issues / get_standup | Services/Agent/Tools/ | 9 × 60 = 540 行 |
+| 11 | [x] セッション永続化 (`%CONFIG%/agent_chat_history/`、User/Assistant/ToolCall 要約のみ保存) | Services/Agent/ | 120 行 |
+| 12 | [x] `?` プレフィックスの導線置き換え: 入力を引き継いで AgentChatPage へ遷移 + 自動送信 (D6 Step 2) | CommandPaletteViewModel / Overlay | 80 行 |
+| 13 | [~] 旧 AskMode UI の削除 (D6 Step 3: AskMode プロパティ / 回答パネル / 引用クリック処理) | CommandPaletteViewModel / Overlay | -200 行 |
+| 14 | [ ] CuriaQueryService の UI 専用 API 整理 (D6 Step 4) | Services/ | 30 行 |
 | 15 | 手動テスト (下記チェックリスト) | - | - |
 
 合計目安: 約 1,540 行 (削除分を除く)。

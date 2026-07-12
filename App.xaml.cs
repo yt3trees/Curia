@@ -19,6 +19,7 @@ public partial class App : WpfApplication
     private const string MutexName = "Global\\Curia_SingleInstance";
     private Mutex? _mutex;
     private IServiceProvider? _serviceProvider;
+    public IServiceProvider Services => _serviceProvider ?? throw new InvalidOperationException("Services are not initialized.");
 
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {
@@ -131,11 +132,31 @@ public partial class App : WpfApplication
         services.AddSingleton<PomodoroService>();
         services.AddSingleton<AgentCompatibilityService>();
         services.AddSingleton<AgentChatHistoryService>();
+        services.AddSingleton<AgentPathGuard>();
+        services.AddSingleton<AgentUiActions>();
         services.AddSingleton<ICuriaAgentTool, ListProjectsTool>();
         services.AddSingleton<ICuriaAgentTool, GetTodayTasksTool>();
         services.AddSingleton<ICuriaAgentTool, GetProjectTasksTool>();
         services.AddSingleton<ICuriaAgentTool, SearchDecisionLogsTool>();
         services.AddSingleton<ICuriaAgentTool, AskKnowledgeBaseTool>();
+        services.AddSingleton<ICuriaAgentTool, ReadFileTool>();
+        services.AddSingleton<ICuriaAgentTool, GetScheduleTool>();
+        services.AddSingleton<ICuriaAgentTool, GetTeamTasksTool>();
+        services.AddSingleton<ICuriaAgentTool, SearchWikiTool>();
+        services.AddSingleton<ICuriaAgentTool, GetStateSnapshotTool>();
+        services.AddSingleton<ICuriaAgentTool, ReadCurrentFocusTool>();
+        services.AddSingleton<ICuriaAgentTool, ReadProjectSummaryTool>();
+        services.AddSingleton<ICuriaAgentTool, GetOpenIssuesTool>();
+        services.AddSingleton<ICuriaAgentTool, GetStandupTool>();
+        services.AddSingleton<ICuriaAgentTool, CreateTaskTool>();
+        services.AddSingleton<ICuriaAgentTool, CaptureNoteTool>();
+        services.AddSingleton<ICuriaAgentTool, AppendToFileTool>();
+        services.AddSingleton<ICuriaAgentTool, SyncAsanaTool>();
+        services.AddSingleton<ICuriaAgentTool, GenerateStandupTool>();
+        services.AddSingleton<ICuriaAgentTool, OpenInEditorTool>();
+        services.AddSingleton<ICuriaAgentTool, OpenInTimelineTool>();
+        services.AddSingleton<ICuriaAgentTool, NavigateToPageTool>();
+        services.AddSingleton<ICuriaAgentTool, StartPomodoroTool>();
         services.AddSingleton<AgentToolRegistry>();
         services.AddSingleton<AgentOrchestratorService>();
 

@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="Ical.Net" Version="5.2.1" />
+    <PackageReference Include="Markdig.Wpf" Version="0.5.0.1" />
     <PackageReference Include="WPF-UI" Version="3.*" />
     <PackageReference Include="AvalonEdit" Version="6.*" />
     <PackageReference Include="DiffPlex" Version="1.*" />

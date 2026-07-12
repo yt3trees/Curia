@@ -35,6 +35,8 @@ public class AgentChatMessage
     public string Text { get; set; } = "";
     public AgentToolCall? ToolCall { get; set; }
     public string ToolResultContent { get; set; } = "";
+    public bool AutoApproveForSession { get; set; }
+    public bool IsApprovalResolved { get; set; }
     public DateTime Timestamp { get; set; } = DateTime.Now;
 
     public bool IsUser => Kind == AgentMessageKind.User;
@@ -42,6 +44,7 @@ public class AgentChatMessage
     public bool IsToolActivity => Kind is AgentMessageKind.ToolCall or AgentMessageKind.ToolResult;
     public bool IsToolCall => Kind == AgentMessageKind.ToolCall;
     public bool IsToolResult => Kind == AgentMessageKind.ToolResult;
+    public bool IsApproval => Kind == AgentMessageKind.Approval;
     public string DisplayText => ToolCall == null ? Text : $"{ToolCall.Tool}: {Text}";
     public string ToolArgumentsDisplay => ToolCall?.Arguments.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
 }

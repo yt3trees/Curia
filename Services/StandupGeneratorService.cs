@@ -61,6 +61,14 @@ public class StandupGeneratorService : IDisposable
         return Path.Combine(obsidian, "standup", $"{DateTime.Today:yyyy-MM-dd}_standup.md");
     }
 
+    public async Task GenerateTodayAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var path = GetTodayStandupPath();
+        if (string.IsNullOrWhiteSpace(path)) throw new InvalidOperationException("Obsidian vault root is not configured.");
+        await GenerateAndSaveAsync(path);
+    }
+
     private async Task GenerateAndSaveAsync(string path)
     {
         var projects = await Task.Run(() => _discoveryService.GetProjectInfoList());

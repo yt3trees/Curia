@@ -17,6 +17,8 @@ public partial class AgentChatViewModel : ObservableObject
     private readonly AgentToolRegistry _toolRegistry;
     private readonly AgentChatHistoryService _historyService;
     private CancellationTokenSource? _runCts;
+    private TaskCompletionSource<bool>? _approvalTcs;
+    private readonly HashSet<string> _autoApprovedTools = new(StringComparer.OrdinalIgnoreCase);
     private bool _historyLoaded;
 
     public ObservableCollection<AgentChatMessage> Messages { get; } = [];
@@ -27,6 +29,7 @@ public partial class AgentChatViewModel : ObservableObject
     [ObservableProperty] private bool isAiEnabled;
     [ObservableProperty] private string statusMessage = "";
     [ObservableProperty] private bool isToolsPanelVisible;
+    [ObservableProperty] private AgentChatMessage? pendingApproval;
 
     public bool CanUseAgent
     {
@@ -71,9 +74,12 @@ public partial class AgentChatViewModel : ObservableObject
 
     [RelayCommand]
     private async Task SendAsync()
+        => await SubmitAsync(InputText);
+
+    public async Task SubmitAsync(string text)
     {
         RefreshAvailability();
-        var input = InputText.Trim();
+        var input = text.Trim();
         if (input.Length == 0 || IsRunning) return;
         if (!CanUseAgent)
         {
@@ -91,7 +97,7 @@ public partial class AgentChatViewModel : ObservableObject
         try
         {
             var answer = await _orchestrator.RunTurnAsync(Messages.Take(Messages.Count - 1).ToList(), input,
-                _ => Task.FromResult(false), AddProgressMessage, _runCts.Token);
+                RequestApprovalAsync, AddProgressMessage, _runCts.Token);
             Messages.Add(answer);
             StatusMessage = "";
         }
@@ -107,6 +113,7 @@ public partial class AgentChatViewModel : ObservableObject
         }
         finally
         {
+            ResolvePendingApproval(false);
             _runCts?.Dispose();
             _runCts = null;
             IsRunning = false;
@@ -115,13 +122,19 @@ public partial class AgentChatViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Cancel() => _runCts?.Cancel();
+    private void Cancel()
+    {
+        ResolvePendingApproval(false);
+        _runCts?.Cancel();
+    }
 
     [RelayCommand]
     private void NewSession()
     {
         if (IsRunning) return;
         Messages.Clear();
+        _autoApprovedTools.Clear();
+        PendingApproval = null;
         _historyService.StartNewSession();
         StatusMessage = "";
     }
@@ -141,6 +154,44 @@ public partial class AgentChatViewModel : ObservableObject
             Messages.Add(message);
             _ = SaveHistoryAsync();
         });
+    }
+
+    [RelayCommand]
+    private void Approve(AgentChatMessage? message) => ResolvePendingApproval(true, message);
+
+    [RelayCommand]
+    private void Reject(AgentChatMessage? message) => ResolvePendingApproval(false, message);
+
+    private Task<bool> RequestApprovalAsync(AgentToolCall toolCall)
+    {
+        if (_autoApprovedTools.Contains(toolCall.Tool)) return Task.FromResult(true);
+        return Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            var message = new AgentChatMessage
+            {
+                Kind = AgentMessageKind.Approval,
+                ToolCall = toolCall,
+                Text = "Approval required before this action is performed.",
+                Timestamp = DateTime.Now
+            };
+            _approvalTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            PendingApproval = message;
+            Messages.Add(message);
+            return _approvalTcs.Task;
+        }).Task.Unwrap();
+    }
+
+    private void ResolvePendingApproval(bool approved, AgentChatMessage? message = null)
+    {
+        if (_approvalTcs == null || PendingApproval == null || (message != null && message != PendingApproval)) return;
+        if (approved && PendingApproval.AutoApproveForSession && PendingApproval.ToolCall != null)
+            _autoApprovedTools.Add(PendingApproval.ToolCall.Tool);
+        PendingApproval.IsApprovalResolved = true;
+        PendingApproval.Text = approved ? "Approved" : "Rejected";
+        OnPropertyChanged(nameof(Messages));
+        _approvalTcs.TrySetResult(approved);
+        _approvalTcs = null;
+        PendingApproval = null;
     }
 
     private async Task SaveHistoryAsync()

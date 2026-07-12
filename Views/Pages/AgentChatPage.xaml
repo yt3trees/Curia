@@ -1,6 +1,7 @@
 <UserControl x:Class="Curia.Views.Pages.AgentChatPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:markdig="clr-namespace:Markdig.Wpf;assembly=Markdig.Wpf"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -45,7 +46,17 @@
                                     <TextBox Text="{Binding DisplayText}" IsReadOnly="True" IsTabStop="False"
                                              TextWrapping="Wrap" AcceptsReturn="True" BorderThickness="0" Padding="0"
                                              Background="Transparent" Foreground="{DynamicResource AppText}"
-                                             CaretBrush="{DynamicResource AppText}"/>
+                                             CaretBrush="{DynamicResource AppText}">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsAssistant}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
+                                    <markdig:MarkdownViewer Markdown="{Binding Text}" Foreground="{DynamicResource AppText}" Background="Transparent"
+                                                            Visibility="{Binding IsAssistant, Converter={StaticResource BoolToVis}}"/>
                                     <Border Background="{DynamicResource AppSurface1}" CornerRadius="3" Padding="7,5" Margin="0,6,0,0"
                                             Visibility="{Binding IsToolCall, Converter={StaticResource BoolToVis}}">
                                         <TextBox Text="{Binding ToolArgumentsDisplay}" IsReadOnly="True" IsTabStop="False"
@@ -53,6 +64,14 @@
                                                  Background="Transparent" Foreground="{DynamicResource AppSubtext0}"
                                                  CaretBrush="{DynamicResource AppText}" FontFamily="Consolas, Courier New" FontSize="11"/>
                                     </Border>
+                                    <StackPanel Margin="0,6,0,0" Visibility="{Binding IsApproval, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="Approval required" FontWeight="SemiBold" Foreground="{DynamicResource AppPeach}"/>
+                                        <CheckBox Content="Automatically approve this tool for this session" IsChecked="{Binding AutoApproveForSession}" Margin="0,5,0,3" Foreground="{DynamicResource AppText}"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <ui:Button Content="Approve" Command="{Binding DataContext.ApproveCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Padding="10,3" Margin="0,0,6,0"/>
+                                            <ui:Button Content="Reject" Command="{Binding DataContext.RejectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" Padding="10,3" Appearance="Secondary"/>
+                                        </StackPanel>
+                                    </StackPanel>
                                     <Border Background="{DynamicResource AppSurface1}" CornerRadius="3" Padding="7,5" Margin="0,6,0,0"
                                             Visibility="{Binding IsToolResult, Converter={StaticResource BoolToVis}}">
                                         <TextBox Text="{Binding ToolResultContent}" IsReadOnly="True" IsTabStop="False"
