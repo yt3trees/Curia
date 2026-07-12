@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Curia.Models;
 using Curia.Services;
+using Curia.Services.Agent;
 
 namespace Curia.ViewModels;
 
@@ -16,6 +17,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly HotkeyService _hotkeyService;
     private readonly TrayService _trayService;
     private readonly LlmClientService _llmClientService;
+    private readonly AgentCompatibilityService _agentCompatibilityService;
     private readonly OutlookCalendarService _outlookCalendarService;
     private readonly IcsCalendarService _icsCalendarService;
     private bool _loading;
@@ -152,6 +154,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool aiToggleCanEnable;
 
+    [ObservableProperty]
+    private string agentCompatibilityStatus = "";
+
     // Capture
     [ObservableProperty]
     private bool captureTaskLogEnabled;
@@ -208,6 +213,7 @@ public partial class SettingsViewModel : ObservableObject
         HotkeyService hotkeyService,
         TrayService trayService,
         LlmClientService llmClientService,
+        AgentCompatibilityService agentCompatibilityService,
         OutlookCalendarService outlookCalendarService,
         IcsCalendarService icsCalendarService)
     {
@@ -215,6 +221,7 @@ public partial class SettingsViewModel : ObservableObject
         _hotkeyService = hotkeyService;
         _trayService = trayService;
         _llmClientService = llmClientService;
+        _agentCompatibilityService = agentCompatibilityService;
         _outlookCalendarService = outlookCalendarService;
         _icsCalendarService = icsCalendarService;
     }
@@ -284,6 +291,8 @@ public partial class SettingsViewModel : ObservableObject
             LlmStatus          = "";
             AiEnabled          = settings.AiEnabled;
             AiToggleCanEnable  = settings.AiEnabled; // 既にオンなら再テスト不要
+            AgentCompatibilityStatus = settings.AgentCompatibilityCheckedFor == $"{settings.LlmProvider}|{settings.LlmModel}"
+                ? (settings.AgentCompatibilityOk ? "Compatible" : "Not compatible") : "Not checked for this provider/model";
             SilenceAlertEnabled    = settings.SilenceAlertEnabled;
             CaptureTaskLogEnabled  = settings.CaptureTaskLogEnabled;
             OutlookCalendarEnabled = settings.OutlookCalendarEnabled;
@@ -385,6 +394,7 @@ public partial class SettingsViewModel : ObservableObject
         settings.LlmUserProfile = LlmUserProfile;
         settings.LlmLanguage    = LlmLanguage.Trim();
         settings.AiEnabled             = AiEnabled;
+        InvalidateAgentCompatibilityIfProviderChanged(settings);
         settings.SilenceAlertEnabled   = SilenceAlertEnabled;
         settings.CaptureTaskLogEnabled = CaptureTaskLogEnabled;
         settings.OutlookCalendarEnabled  = OutlookCalendarEnabled;
@@ -413,8 +423,20 @@ public partial class SettingsViewModel : ObservableObject
         settings.LlmUserProfile = LlmUserProfile;
         settings.LlmLanguage    = LlmLanguage.Trim();
         settings.AiEnabled      = AiEnabled;
+        InvalidateAgentCompatibilityIfProviderChanged(settings);
         _configService.SaveSettings(settings);
         LlmStatus = $"Saved {DateTime.Now:HH:mm:ss}";
+    }
+
+    private void InvalidateAgentCompatibilityIfProviderChanged(AppSettings settings)
+    {
+        var current = $"{settings.LlmProvider}|{settings.LlmModel}";
+        if (!string.Equals(settings.AgentCompatibilityCheckedFor, current, StringComparison.OrdinalIgnoreCase))
+        {
+            settings.AgentCompatibilityOk = false;
+            settings.AgentCompatibilityCheckedFor = "";
+            AgentCompatibilityStatus = "Not checked for this provider/model";
+        }
     }
 
     [RelayCommand]
@@ -432,6 +454,23 @@ public partial class SettingsViewModel : ObservableObject
             LlmStatus = $"Error: {ex.Message}";
             AiToggleCanEnable = false;
             AiEnabled = false;
+        }
+    }
+
+    [RelayCommand]
+    public async Task TestAgentCompatibilityAsync()
+    {
+        LlmStatus = "Testing agent compatibility...";
+        try
+        {
+            var passed = await _agentCompatibilityService.TestAsync(CancellationToken.None);
+            AgentCompatibilityStatus = passed ? "Compatible" : "Not compatible";
+            LlmStatus = passed ? "Agent compatibility check passed." : "Agent compatibility check failed.";
+        }
+        catch (Exception ex)
+        {
+            AgentCompatibilityStatus = "Check failed";
+            LlmStatus = $"Agent compatibility error: {ex.Message}";
         }
     }
 

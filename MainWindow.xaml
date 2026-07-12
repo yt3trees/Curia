@@ -74,6 +74,9 @@
                     <ui:NavigationViewItem Content="Agent Hub"
                         Icon="{ui:SymbolIcon Symbol=BotSparkle24}"
                         TargetPageType="{x:Type pages:AgentHubPage}" />
+                    <ui:NavigationViewItem Content="Agent Chat"
+                        Icon="{ui:SymbolIcon Symbol=Chat24}"
+                        TargetPageType="{x:Type pages:AgentChatPage}" />
                 </ui:NavigationView.MenuItems>
 
                 <ui:NavigationView.FooterMenuItems>

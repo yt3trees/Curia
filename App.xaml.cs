@@ -4,6 +4,8 @@ using Wpf.Ui;
 using Wpf.Ui.Appearance;
 using Curia.Services;
 using Curia.Services.Adapters;
+using Curia.Services.Agent;
+using Curia.Services.Agent.Tools;
 using Curia.ViewModels;
 using Curia.Views;
 using Curia.Views.Pages;
@@ -127,6 +129,15 @@ public partial class App : WpfApplication
         services.AddSingleton<IcsCalendarService>();
         services.AddSingleton<MeetingFollowupService>();
         services.AddSingleton<PomodoroService>();
+        services.AddSingleton<AgentCompatibilityService>();
+        services.AddSingleton<AgentChatHistoryService>();
+        services.AddSingleton<ICuriaAgentTool, ListProjectsTool>();
+        services.AddSingleton<ICuriaAgentTool, GetTodayTasksTool>();
+        services.AddSingleton<ICuriaAgentTool, GetProjectTasksTool>();
+        services.AddSingleton<ICuriaAgentTool, SearchDecisionLogsTool>();
+        services.AddSingleton<ICuriaAgentTool, AskKnowledgeBaseTool>();
+        services.AddSingleton<AgentToolRegistry>();
+        services.AddSingleton<AgentOrchestratorService>();
 
         // ViewModels
         services.AddSingleton<MainWindowViewModel>();
@@ -142,6 +153,7 @@ public partial class App : WpfApplication
         services.AddSingleton<AgentHubViewModel>();
         services.AddSingleton<WikiViewModel>();
         services.AddSingleton<WeeklyScheduleViewModel>();
+        services.AddSingleton<AgentChatViewModel>();
 
         // Pages
         services.AddSingleton<DashboardPage>();
@@ -154,6 +166,7 @@ public partial class App : WpfApplication
         services.AddSingleton<AgentHubPage>();
         services.AddSingleton<WikiPage>();
         services.AddSingleton<WeeklySchedulePage>();
+        services.AddSingleton<AgentChatPage>();
 
         // wpf-ui: IPageService for DI-based page resolution
         services.AddSingleton<IPageService, AppPageService>();
