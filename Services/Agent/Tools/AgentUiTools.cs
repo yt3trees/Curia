@@ -7,15 +7,17 @@ namespace Curia.Services.Agent.Tools;
 
 public class OpenInEditorTool : ICuriaAgentTool
 {
-    private readonly ProjectDiscoveryService _discovery; private readonly AgentUiActions _actions;
-    public OpenInEditorTool(ProjectDiscoveryService discovery, AgentUiActions actions) => (_discovery, _actions) = (discovery, actions);
+    private readonly ProjectDiscoveryService _discovery; private readonly AgentUiActions _actions; private readonly AgentPathGuard _guard;
+    public OpenInEditorTool(ProjectDiscoveryService discovery, AgentUiActions actions, AgentPathGuard guard) => (_discovery, _actions, _guard) = (discovery, actions, guard);
     public AgentToolDescriptor Descriptor { get; } = new() { Name = "open_in_editor", RiskLevel = ToolRiskLevel.ReadOnly, Description = "Opens a managed file in Curia's Editor page.", ParametersSchema = "{\"project\":\"required project name\",\"path\":\"required file path\"}" };
     public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
     {
         var project = AgentToolArguments.ResolveProject(await _discovery.GetProjectInfoListAsync(ct: ct), AgentToolArguments.String(arguments, "project"), out var error);
         if (project == null) return Fail(error!);
-        var path = AgentToolArguments.String(arguments, "path");
+        var requestedPath = AgentToolArguments.String(arguments, "path");
+        if (!_guard.TryResolveWithinRoots(requestedPath, [project.Path, project.AiContextPath, project.AiContextContentPath], out var path, out error)) return Fail(error);
         if (!File.Exists(path)) return Fail("File not found.");
+        if (!_guard.TryResolveWithinRoots(path, [project.Path, project.AiContextPath, project.AiContextContentPath], out path, out error)) return Fail(error);
         if (_actions.OpenInEditorAsync == null) return Fail("Editor navigation is unavailable.");
         await _actions.OpenInEditorAsync(project, path);
         return new AgentToolResult { Success = true, Content = $"Opened {path} in Editor.", DisplaySummary = "Opened in Editor" };

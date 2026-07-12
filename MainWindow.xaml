@@ -76,6 +76,7 @@
                         TargetPageType="{x:Type pages:AgentHubPage}" />
                     <ui:NavigationViewItem Content="Agent Chat"
                         Icon="{ui:SymbolIcon Symbol=Chat24}"
+                        Visibility="{Binding CanUseAgent, Converter={StaticResource BooleanToVisibilityConverter}}"
                         TargetPageType="{x:Type pages:AgentChatPage}" />
                 </ui:NavigationView.MenuItems>
 

@@ -15,28 +15,39 @@ public static class AgentProtocol
         try
         {
             var node = JsonNode.Parse(json) as JsonObject;
-            var type = node?["type"]?.GetValue<string>();
+            if (node == null) return false;
+            if (!TryGetString(node, "type", out var type)) return false;
             if (string.Equals(type, "final_answer", StringComparison.OrdinalIgnoreCase))
             {
-                finalAnswer = node?["text"]?.GetValue<string>() ?? "";
+                if (!TryGetString(node, "text", out var text)) return false;
+                finalAnswer = text;
                 return true;
             }
 
             if (!string.Equals(type, "tool_call", StringComparison.OrdinalIgnoreCase)) return false;
-            var tool = node?["tool"]?.GetValue<string>();
+            if (!TryGetString(node, "tool", out var tool)) return false;
             if (string.IsNullOrWhiteSpace(tool)) return false;
+            if (node["arguments"] is not null and not JsonObject) return false;
             toolCall = new AgentToolCall
             {
                 Tool = tool,
                 Arguments = node?["arguments"] as JsonObject ?? new JsonObject(),
-                Reason = node?["reason"]?.GetValue<string>() ?? ""
+                Reason = TryGetString(node, "reason", out var reason) ? reason : ""
             };
             return true;
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
             return false;
         }
+    }
+
+    private static bool TryGetString(JsonObject node, string name, out string value)
+    {
+        value = "";
+        if (node[name] is not JsonValue jsonValue || !jsonValue.TryGetValue<string>(out var parsed)) return false;
+        value = parsed ?? "";
+        return true;
     }
 
     public static bool TryExtractJson(string response, out string json)

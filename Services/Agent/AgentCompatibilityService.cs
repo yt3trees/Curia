@@ -1,4 +1,5 @@
 using Curia.Models;
+using CommunityToolkit.Mvvm.Messaging;
 
 namespace Curia.Services.Agent;
 
@@ -61,6 +62,7 @@ For a completed request, return {"type":"final_answer","text":"ok"}.
         settings.AgentCompatibilityOk = passed;
         settings.AgentCompatibilityCheckedFor = $"{settings.LlmProvider}|{settings.LlmModel}";
         _config.SaveSettings(settings);
+        WeakReferenceMessenger.Default.Send(new AgentCompatibilityChangedMessage(passed));
         return passed;
     }
 }

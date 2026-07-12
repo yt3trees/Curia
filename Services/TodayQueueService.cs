@@ -186,6 +186,10 @@ public class TodayQueueService
         {
             lines = File.ReadAllLines(asanaPath, Encoding.UTF8);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             Debug.WriteLine($"[TodayQueue] Failed to read '{asanaPath}': {ex.Message}");

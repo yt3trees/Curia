@@ -15,7 +15,9 @@ public class ReadFileTool : ICuriaAgentTool
     {
         if (!_guard.TryResolve(AgentToolArguments.String(arguments, "path"), out var path, out var error)) return Fail(error);
         if (!File.Exists(path)) return Fail("File not found.");
+        if (!_guard.Revalidate(path, out error)) return Fail(error);
         var (content, encoding) = await _files.ReadFileAsync(path, ct);
+        if (!_guard.Revalidate(path, out error)) return Fail(error);
         return AgentToolArguments.JsonResult(new { Path = path, Encoding = encoding, Content = content }, "File read");
     }
     private static AgentToolResult Fail(string content) => new() { Success = false, Content = content, DisplaySummary = "Read denied" };
@@ -23,6 +25,7 @@ public class ReadFileTool : ICuriaAgentTool
 
 public class AppendToFileTool : ICuriaAgentTool
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> FileLocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly AgentPathGuard _guard;
     private readonly FileEncodingService _files;
     public AppendToFileTool(AgentPathGuard guard, FileEncodingService files) => (_guard, _files) = (guard, files);
@@ -30,11 +33,22 @@ public class AppendToFileTool : ICuriaAgentTool
     public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
     {
         if (!_guard.TryResolve(AgentToolArguments.String(arguments, "path"), out var path, out var error)) return Fail(error);
-        if (!File.Exists(path)) return Fail("File not found. This tool never creates files.");
         var content = AgentToolArguments.String(arguments, "content");
         if (content.Length == 0) return Fail("content is required.");
-        var (existing, encoding) = await _files.ReadFileAsync(path, ct);
-        await _files.WriteFileAsync(path, existing.TrimEnd() + Environment.NewLine + content + Environment.NewLine, encoding, ct);
+        var fileLock = FileLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
+        await fileLock.WaitAsync(ct);
+        try
+        {
+            if (!File.Exists(path)) return Fail("File not found. This tool never creates files.");
+            if (!_guard.Revalidate(path, out error)) return Fail(error);
+            var lastWrite = File.GetLastWriteTimeUtc(path);
+            var (existing, encoding) = await _files.ReadFileAsync(path, ct);
+            if (!_guard.Revalidate(path, out error)) return Fail(error);
+            if (File.GetLastWriteTimeUtc(path) != lastWrite)
+                (existing, encoding) = await _files.ReadFileAsync(path, ct);
+            await _files.WriteFileAsync(path, existing.TrimEnd() + Environment.NewLine + content + Environment.NewLine, encoding, ct);
+        }
+        finally { fileLock.Release(); }
         return new AgentToolResult { Success = true, Content = $"Appended to {path}.", DisplaySummary = "Text appended" };
     }
     private static AgentToolResult Fail(string content) => new() { Success = false, Content = content, DisplaySummary = "Append denied" };

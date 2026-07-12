@@ -103,7 +103,7 @@ public class AgentChatHistoryService
         try
         {
             Directory.CreateDirectory(HistoryDirectory);
-            _currentSessionPath ??= Path.Combine(HistoryDirectory, $"{DateTime.Now:yyyy-MM-dd_HHmmss}.json");
+            _currentSessionPath ??= CreateSessionPath();
             var persisted = messages
                 .Where(message => message.Kind is AgentMessageKind.User or AgentMessageKind.Assistant or AgentMessageKind.ToolCall)
                 .Select(message => new AgentChatHistoryEntry
@@ -141,5 +141,15 @@ public class AgentChatHistoryService
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
+    }
+
+    private string CreateSessionPath()
+    {
+        string path;
+        do
+        {
+            path = Path.Combine(HistoryDirectory, $"{DateTime.UtcNow:yyyy-MM-dd_HHmmss_fff}_{Guid.NewGuid():N}.json");
+        } while (File.Exists(path));
+        return path;
     }
 }

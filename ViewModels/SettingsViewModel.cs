@@ -436,6 +436,7 @@ public partial class SettingsViewModel : ObservableObject
             settings.AgentCompatibilityOk = false;
             settings.AgentCompatibilityCheckedFor = "";
             AgentCompatibilityStatus = "Not checked for this provider/model";
+            WeakReferenceMessenger.Default.Send(new AgentCompatibilityChangedMessage(false));
         }
     }
 

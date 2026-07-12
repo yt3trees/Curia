@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Collections.Concurrent;
+using System.IO;
 using Curia.Models;
 using Curia.Services;
 
@@ -35,9 +36,10 @@ public class UpdateCurrentFocusTool : ICuriaAgentTool
             return Failure("Focus update review is unavailable. Open Agent Chat from the Curia window and try again.");
 
         var workstream = AgentToolArguments.String(arguments, "workstream");
+        if (!AgentWorkstreamValidator.TryValidateWorkstream(project, workstream, out var validatedWorkstream, out error)) return Failure(error);
         var result = await _focusUpdate.GenerateProposalAsync(
             project,
-            string.IsNullOrWhiteSpace(workstream) ? null : workstream,
+            validatedWorkstream,
             ct,
             AgentToolArguments.String(arguments, "context"));
 
@@ -95,13 +97,14 @@ public class AppendDecisionLogTool : ICuriaAgentTool
             return Failure("Decision log review is unavailable. Open Agent Chat from the Curia window and try again.");
 
         var workstream = AgentToolArguments.String(arguments, "workstream");
+        if (!AgentWorkstreamValidator.TryValidateWorkstream(project, workstream, out var validatedWorkstream, out error)) return Failure(error);
         var draft = await _decisionLogs.GenerateDraftAsync(
             decision,
             [],
             string.IsNullOrWhiteSpace(AgentToolArguments.String(arguments, "status")) ? "Confirmed" : AgentToolArguments.String(arguments, "status"),
             string.IsNullOrWhiteSpace(AgentToolArguments.String(arguments, "trigger")) ? "Agent chat" : AgentToolArguments.String(arguments, "trigger"),
             project,
-            string.IsNullOrWhiteSpace(workstream) ? null : workstream,
+            validatedWorkstream,
             ct: ct);
         var proposal = new FileUpdateProposal
         {
@@ -121,7 +124,7 @@ public class AppendDecisionLogTool : ICuriaAgentTool
         });
         if (!apply) return new AgentToolResult { Success = false, Content = "The decision log was not saved during review.", DisplaySummary = "Decision log skipped" };
 
-        var path = await _decisionLogs.SaveDraftAsync(project, string.IsNullOrWhiteSpace(workstream) ? null : workstream, draft, content, ct: ct);
+        var path = await _decisionLogs.SaveDraftAsync(project, validatedWorkstream, draft, content, ct: ct);
         return new AgentToolResult { Success = true, Content = $"Saved decision log: {path}", DisplaySummary = "Decision log saved" };
     }
 
@@ -130,7 +133,7 @@ public class AppendDecisionLogTool : ICuriaAgentTool
 
 public class CompleteTaskTool : ICuriaAgentTool
 {
-    private sealed record CompletionUndo(string TaskGid, DateTime ExpiresAt);
+    private sealed record CompletionUndo(string TaskGid, DateTime ExpiresAt, bool InProgress = false);
 
     private static readonly ConcurrentDictionary<string, CompletionUndo> UndoRecords = new(StringComparer.Ordinal);
     private readonly TodayQueueService _todayQueue;
@@ -169,13 +172,52 @@ public class CompleteTaskTool : ICuriaAgentTool
 
     private async Task<AgentToolResult> UndoAsync(string token, CancellationToken ct)
     {
-        if (!UndoRecords.TryRemove(token, out var record)) return Failure("The undo token was not found or has already been used.");
+        if (!UndoRecords.TryGetValue(token, out var record)) return Failure("The undo token was not found or has already been used.");
         if (record.ExpiresAt < DateTime.Now) return Failure("The undo token has expired.");
-        var (success, message) = await _todayQueue.SetAsanaTaskCompletedAsync(record.TaskGid, false, ct);
-        return success
-            ? new AgentToolResult { Success = true, Content = message, DisplaySummary = "Task restored" }
-            : Failure(message);
+        var inProgress = record with { InProgress = true };
+        if (record.InProgress || !UndoRecords.TryUpdate(token, inProgress, record))
+            return Failure("The undo token is already being used. Try again shortly.");
+        try
+        {
+            var (success, message) = await _todayQueue.SetAsanaTaskCompletedAsync(record.TaskGid, false, ct);
+            if (success)
+            {
+                UndoRecords.TryRemove(new KeyValuePair<string, CompletionUndo>(token, inProgress));
+                return new AgentToolResult { Success = true, Content = message, DisplaySummary = "Task restored" };
+            }
+            UndoRecords.TryUpdate(token, record, inProgress);
+            return Failure(message);
+        }
+        catch (OperationCanceledException)
+        {
+            UndoRecords.TryUpdate(token, record, inProgress);
+            throw;
+        }
     }
 
     private static AgentToolResult Failure(string content) => new() { Success = false, Content = content, DisplaySummary = "Task update failed" };
+}
+
+internal static class AgentWorkstreamValidator
+{
+    public static bool TryValidateWorkstream(ProjectInfo project, string? suppliedId, out string? workstreamId, out string error)
+    {
+        workstreamId = null;
+        error = "";
+        if (string.IsNullOrWhiteSpace(suppliedId)) return true;
+        if (Path.IsPathRooted(suppliedId) || suppliedId.Contains("..", StringComparison.Ordinal)
+            || suppliedId.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0
+            || suppliedId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            error = "Invalid workstream id.";
+            return false;
+        }
+        if (!project.Workstreams.Any(workstream => string.Equals(workstream.Id, suppliedId, StringComparison.Ordinal)))
+        {
+            error = $"Unknown workstream id for project {project.DisplayName}.";
+            return false;
+        }
+        workstreamId = suppliedId;
+        return true;
+    }
 }

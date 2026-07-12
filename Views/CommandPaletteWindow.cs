@@ -26,7 +26,6 @@ public class CommandPaletteWindow : Window
     private System.Windows.Controls.TextBox _searchBox = null!;
     private WpfListBox _commandList = null!;
     private TextBlock _askHint = null!;
-    private TextBlock _askLoadingLabel = null!;
     private StackPanel _conversationPanel = null!;
 
     // IME 制御は日本語環境でのみ行う
@@ -82,21 +81,13 @@ public class CommandPaletteWindow : Window
 
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
 
-        // 引用クリック → エディタへジャンプするコールバックを設定
-        _viewModel.OnOpenInEditor = (project, filePath) =>
-        {
-            _canCloseOnDeactivate = false;
-            _mainWindow.NavigateToEditorAndOpenFile(project, filePath);
-            _mainWindow.BringToFront();
-            Close();
-        };
-
-        _viewModel.OnAskAgent = question =>
+        _viewModel.OnAskAgent = async question =>
         {
             _canCloseOnDeactivate = false;
             _mainWindow.RootNavigation.Navigate(typeof(AgentChatPage));
             var agent = ((App)Application.Current).Services.GetRequiredService<AgentChatViewModel>();
-            _ = agent.SubmitAsync(question);
+            await agent.InitializeAsync();
+            await agent.SubmitAsync(question);
             _mainWindow.BringToFront();
             Close();
         };
@@ -223,22 +214,8 @@ public class CommandPaletteWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        switch (e.PropertyName)
-        {
-            case nameof(CommandPaletteViewModel.IsAskMode):
-                if (_needsImeControl)
-                    System.Windows.Input.InputMethod.SetIsInputMethodEnabled(
-                        _searchBox, _viewModel.IsAskMode);
-                Dispatcher.InvokeAsync(UpdateAskModeUI);
-                break;
-            case nameof(CommandPaletteViewModel.IsAskLoading):
-            case nameof(CommandPaletteViewModel.LastAnswer):
-                Dispatcher.InvokeAsync(UpdateAskModeUI);
-                break;
-            case nameof(CommandPaletteViewModel.SearchText):
-                Dispatcher.InvokeAsync(SyncSearchBoxText);
-                break;
-        }
+        if (e.PropertyName == nameof(CommandPaletteViewModel.SearchText))
+            Dispatcher.InvokeAsync(SyncSearchBoxText);
     }
 
     private void SyncSearchBoxText()
@@ -295,7 +272,7 @@ public class CommandPaletteWindow : Window
 
             var turnCount = new TextBlock
             {
-                Text     = $"Ask Curia  ({_viewModel.ConversationTurns.Count} turn{(_viewModel.ConversationTurns.Count > 1 ? "s" : "")})",
+                Text     = $"Conversation  ({_viewModel.ConversationTurns.Count} turn{(_viewModel.ConversationTurns.Count > 1 ? "s" : "")})",
                 FontSize = 11,
                 VerticalAlignment = VerticalAlignment.Center,
             };
@@ -504,39 +481,26 @@ public class CommandPaletteWindow : Window
         switch (e.Key)
         {
             case Key.Escape:
-                if (_viewModel.IsAskLoading)
-                {
-                    // ロード中はキャンセルして検索ボックスを "?" に戻す
-                    _viewModel.CancelAsk();
-                    _suppressTextChanged = true;
-                    _searchBox.Text = "?";
-                    _searchBox.CaretIndex = 1;
-                    _suppressTextChanged = false;
-                    e.Handled = true;
-                }
-                else
-                {
-                    Close();
-                    e.Handled = true;
-                }
+                Close();
+                e.Handled = true;
                 break;
             case Key.Enter:
-                if (_searchBox.Text.StartsWith("?") && !_viewModel.IsAskLoading)
+                if (_searchBox.Text.StartsWith("?"))
                 {
                     _ = _viewModel.AskAsync(_searchBox.Text);
                     e.Handled = true;
                 }
-                else if (!_viewModel.IsAskMode)
+                else
                 {
                     ExecuteAndClose();
                     e.Handled = true;
                 }
                 break;
             case Key.Down:
-                if (!_viewModel.IsAskMode) { MoveSelection(1); e.Handled = true; }
+                MoveSelection(1); e.Handled = true;
                 break;
             case Key.Up:
-                if (!_viewModel.IsAskMode) { MoveSelection(-1); e.Handled = true; }
+                MoveSelection(-1); e.Handled = true;
                 break;
         }
     }

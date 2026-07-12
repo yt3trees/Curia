@@ -41,6 +41,7 @@ public class AgentOrchestratorService
         for (var iteration = 0; iteration < maxIterations; iteration++)
         {
             ct.ThrowIfCancellationRequested();
+            EnsureAgentAvailable();
             var response = await _llm.ChatWithHistoryAsync(systemPrompt, messages, ct);
             if (!AgentProtocol.TryParse(response, out var call, out var finalAnswer))
             {
@@ -67,7 +68,11 @@ public class AgentOrchestratorService
             }
             else
             {
-                try { result = await tool.ExecuteAsync(toolCall.Arguments, ct); }
+                try
+                {
+                    EnsureAgentAvailable();
+                    result = await tool.ExecuteAsync(toolCall.Arguments, ct);
+                }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex) { result = new AgentToolResult { Success = false, Content = $"Tool error: {ex.Message}", DisplaySummary = "Error" }; }
             }
@@ -93,6 +98,14 @@ public class AgentOrchestratorService
     private static bool IsCompatibilityCurrent(AppSettings settings) => settings.AgentCompatibilityOk
         && string.Equals(settings.AgentCompatibilityCheckedFor, $"{settings.LlmProvider}|{settings.LlmModel}", StringComparison.OrdinalIgnoreCase);
 
+    private void EnsureAgentAvailable()
+    {
+        var settings = _configService.LoadSettings();
+        if (!settings.AiEnabled) throw new OperationCanceledException("AI features were disabled.");
+        if (!IsCompatibilityCurrent(settings))
+            throw new InvalidOperationException("This provider/model did not pass the agent compatibility check.");
+    }
+
     private async Task<AgentChatMessage> RunNativeTurnAsync(
         AppSettings settings,
         IReadOnlyList<ProjectInfo> projects,
@@ -111,6 +124,7 @@ public class AgentOrchestratorService
         for (var iteration = 0; iteration < maxIterations; iteration++)
         {
             ct.ThrowIfCancellationRequested();
+            EnsureAgentAvailable();
             var response = await _llm.ChatWithToolsAsync(systemPrompt, messages, descriptors, ct);
             if (response.ToolCalls.Count == 0)
                 return Assistant(response.Content ?? "No response was returned.");
@@ -145,8 +159,10 @@ public class AgentOrchestratorService
     {
         if (!_registry.TryGet(toolCall.Tool, out var tool) || tool == null)
             return new AgentToolResult { Success = false, Content = $"Unknown tool: {toolCall.Tool}", DisplaySummary = "Unknown tool" };
+        EnsureAgentAvailable();
         if (tool.Descriptor.RiskLevel != ToolRiskLevel.ReadOnly && !await approvalCallback(toolCall))
             return new AgentToolResult { Success = false, Content = "User rejected this action.", DisplaySummary = "Rejected" };
+        EnsureAgentAvailable();
         try { return await tool.ExecuteAsync(toolCall.Arguments, ct); }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) { return new AgentToolResult { Success = false, Content = $"Tool error: {ex.Message}", DisplaySummary = "Error" }; }

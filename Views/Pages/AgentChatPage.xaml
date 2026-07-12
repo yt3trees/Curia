@@ -65,7 +65,7 @@
                                                  Background="Transparent" Foreground="{DynamicResource AppSubtext0}"
                                                  CaretBrush="{DynamicResource AppText}" FontFamily="Consolas, Courier New" FontSize="11"/>
                                     </Border>
-                                    <StackPanel Margin="0,6,0,0" Visibility="{Binding IsApproval, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel Margin="0,6,0,0" Visibility="{Binding IsApprovalPending, Converter={StaticResource BoolToVis}}">
                                         <TextBlock Text="Approval required" FontWeight="SemiBold" Foreground="{DynamicResource AppPeach}"/>
                                         <CheckBox Content="Automatically approve this tool for this session" IsChecked="{Binding AutoApproveForSession}" Margin="0,5,0,3" Foreground="{DynamicResource AppText}"/>
                                         <StackPanel Orientation="Horizontal">

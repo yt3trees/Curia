@@ -21,6 +21,11 @@ public class AiEnabledChangedMessage(bool enabled)
     public bool Enabled { get; } = enabled;
 }
 
+public class AgentCompatibilityChangedMessage(bool isCompatible)
+{
+    public bool IsCompatible { get; } = isCompatible;
+}
+
 /// <summary>
 /// Editor / Wiki のフォントサイズが変わったときのメッセージ。
 /// </summary>

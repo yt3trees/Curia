@@ -20,6 +20,8 @@ public partial class AgentChatViewModel : ObservableObject
     private TaskCompletionSource<bool>? _approvalTcs;
     private readonly HashSet<string> _autoApprovedTools = new(StringComparer.OrdinalIgnoreCase);
     private bool _historyLoaded;
+    private readonly object _initializationLock = new();
+    private Task? _initializationTask;
 
     public ObservableCollection<AgentChatMessage> Messages { get; } = [];
     public ObservableCollection<AgentChatSessionSummary> Sessions { get; } = [];
@@ -54,7 +56,17 @@ public partial class AgentChatViewModel : ObservableObject
         Tools = _toolRegistry.GetDescriptors();
         IsAiEnabled = config.LoadSettings().AiEnabled;
         WeakReferenceMessenger.Default.Register<AiEnabledChangedMessage>(this,
-            (_, message) => IsAiEnabled = message.Enabled);
+            (_, message) =>
+            {
+                IsAiEnabled = message.Enabled;
+                if (!message.Enabled)
+                {
+                    ResolvePendingApproval(false);
+                    _runCts?.Cancel();
+                }
+            });
+        WeakReferenceMessenger.Default.Register<AgentCompatibilityChangedMessage>(this,
+            (_, _) => RefreshAvailability());
     }
 
     partial void OnIsAiEnabledChanged(bool value) => OnPropertyChanged(nameof(CanUseAgent));
@@ -67,13 +79,21 @@ public partial class AgentChatViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
+        RefreshAvailability();
+        Task initialization;
+        lock (_initializationLock)
+            initialization = _initializationTask ??= InitializeCoreAsync();
+        await initialization;
+    }
+
+    private async Task InitializeCoreAsync()
+    {
         if (_historyLoaded) return;
         _historyLoaded = true;
         var messages = await _historyService.LoadLatestSessionAsync();
         foreach (var message in messages) Messages.Add(message);
         if (messages.Count > 0) StatusMessage = "Restored the most recent chat session.";
         await RefreshSessionsAsync();
-        RefreshAvailability();
     }
 
     [RelayCommand]
@@ -82,6 +102,7 @@ public partial class AgentChatViewModel : ObservableObject
 
     public async Task SubmitAsync(string text)
     {
+        await InitializeAsync();
         RefreshAvailability();
         var input = text.Trim();
         if (input.Length == 0 || IsRunning) return;
@@ -161,6 +182,7 @@ public partial class AgentChatViewModel : ObservableObject
         var messages = await _historyService.LoadSessionAsync(session.Path);
         Messages.Clear();
         foreach (var message in messages) Messages.Add(message);
+        _autoApprovedTools.Clear();
         SelectedSession = session;
         IsHistoryPanelVisible = false;
         StatusMessage = $"Restored chat from {session.UpdatedAt:g}.";
@@ -171,7 +193,15 @@ public partial class AgentChatViewModel : ObservableObject
     {
         if (session == null || IsRunning) return;
         await _historyService.DeleteSessionAsync(session.Path);
-        if (SelectedSession == session) SelectedSession = null;
+        if (SelectedSession == session)
+        {
+            Messages.Clear();
+            _autoApprovedTools.Clear();
+            PendingApproval = null;
+            _historyService.StartNewSession();
+            SelectedSession = null;
+            StatusMessage = "Deleted session. Started a new chat.";
+        }
         await RefreshSessionsAsync();
     }
 
@@ -191,12 +221,10 @@ public partial class AgentChatViewModel : ObservableObject
         if (Application.Current.Dispatcher.CheckAccess())
         {
             Messages.Add(message);
-            _ = SaveHistoryAsync();
         }
         else Application.Current.Dispatcher.Invoke(() =>
         {
             Messages.Add(message);
-            _ = SaveHistoryAsync();
         });
     }
 
@@ -232,7 +260,6 @@ public partial class AgentChatViewModel : ObservableObject
             _autoApprovedTools.Add(PendingApproval.ToolCall.Tool);
         PendingApproval.IsApprovalResolved = true;
         PendingApproval.Text = approved ? "Approved" : "Rejected";
-        OnPropertyChanged(nameof(Messages));
         _approvalTcs.TrySetResult(approved);
         _approvalTcs = null;
         PendingApproval = null;

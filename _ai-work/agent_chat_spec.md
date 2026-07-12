@@ -17,6 +17,7 @@ Phase A / Phase B の基盤実装と、Phase C の主要機能は完了してい
 - Phase C: 履歴一覧、任意セッション再開、履歴削除、および固定プリセット "Morning preparation" を実装済み。
 - Phase C: `complete_task` は Asana の完了操作後に 15 分間有効な Undo token を返す。Undo token はアプリ内メモリのみで保持し、アプリ再起動後は利用できない。
 - Phase C: `openai` / `azure_openai` は native function calling (`tools` / `tool_calls`) を利用する。CLI プロバイダは既存のプロンプトベース JSON プロトコルを維持する。Compatibility Check はプロバイダに応じて native echo probe または JSON probe を実行する。
+- 2026-07-12 のコードレビューで、CLI transport の権限制御、Phase C ツールのパス検証、セッション競合などに未修正の問題が確認された。詳細は「コードレビュー結果と修正バックログ」を参照。
 
 チャット UI から自然文で指示すると、AI エージェントが Curia の各サービスを「ツール」として呼び出し、データ取得・操作を代行する機能。
 
@@ -499,6 +500,81 @@ Available tools:
 - [ ] `?` 入力 → AgentChatPage 遷移 + 自動送信が機能すること
 - [ ] 旧 AskMode 削除後、CommandPalette の通常検索が退行していないこと
 - [ ] WikiPage の Wiki チャットが影響を受けていないこと
+
+---
+
+## コードレビュー結果と修正バックログ (2026-07-12)
+
+静的レビューに加えて、`dotnet build Curia.csproj` と分離ディレクトリへの `dotnet publish Curia.csproj -p:PublishProfile=SingleFile` を実行し、どちらも成功した。コンパイルエラーはないが、以下のセキュリティ問題、競合状態、仕様未達が残っている。リポジトリには自動テストがないため、修正後は本節と既存の手動テスト観点を使用して回帰確認する。
+
+### P0: リリース前に修正
+
+- [ ] `update_current_focus` / `append_decision_log` の `workstream` を検証する。
+    - LLM 由来の値を `Path.Combine` に渡す前に、対象プロジェクトの既存 `Workstreams` の ID と完全一致することを確認する。
+    - 最終パスを正規化し、対象プロジェクトの期待するルート配下であることを再検証する。`..`、ルート付きパス、区切り文字を含む不正 ID は拒否する。
+- [ ] `AgentPathGuard` で junction / symbolic link による管理ルート逸脱を防ぐ。
+    - 各既存パスセグメントの reparse point を解決して実体パスを検証するか、少なくとも reparse point を含むアクセスを拒否する。
+    - `read_file` と `append_to_file` の両方へ適用し、TOCTOU を考慮してファイルオープン時にも境界を確認する。
+- [ ] config ディレクトリ内の秘密情報を `read_file` から保護する。
+    - `settings.json`、`asana_global.json` など、API key / token / credential を含むファイルを拒否する。
+    - config ルート全体の許可ではなく、安全なファイルの allowlist を優先する。
+- [ ] `open_in_editor` に管理パス検証を追加する。
+    - `AgentPathGuard` を適用し、指定ファイルが選択されたプロジェクトの許可ディレクトリ配下であることも確認する。
+- [ ] CLI 呼び出しのユーザーキャンセル時に子プロセスを終了する。
+    - タイムアウトだけでなく、すべての `OperationCanceledException` で実行中のプロセスツリーを停止してからキャンセルを再送出する。
+- [ ] `complete_task` の Undo token を失敗時に保持する。
+    - Asana API 成功前に token を削除しない。同時利用防止が必要な場合は `InProgress` 状態を導入し、失敗・キャンセル時に再利用可能へ戻す。
+    - `TodayQueueService.SetAsanaTaskCompletedAsync` は `OperationCanceledException` を一般エラーへ変換せず再送出する。
+
+### P1: 主要機能の安定化
+
+- [ ] Command Palette 初回遷移時の履歴復元と自動送信を直列化する。
+    - `AgentChatViewModel.InitializeAsync()` の完了後に `SubmitAsync(question)` を await する。
+    - 初期化、履歴ロード、送信、保存を同じ非同期ロックで保護し、fire-and-forget の例外を残さない。
+- [ ] 履歴から別セッションをロードしたときに `_autoApprovedTools` をクリアする。
+    - 自動承認状態は ViewModel 全体ではなくセッション ID に紐付けるか、`LoadSessionAsync` 成功時に必ずリセットする。
+- [ ] native function calling のツールパラメータを正式な JSON Schema で定義する。
+    - 現在の簡易変換は `minutes` 以外を文字列として公開するため、`limit` など実装側が整数を要求する引数と不整合になる。
+    - 全 Descriptor のスキーマを起動時に検証し、不正スキーマを `additionalProperties=true` へ黙ってフォールバックしない。
+- [ ] CLI JSON パーサの型不一致を安全に処理する。
+    - `type`、`tool`、`text`、`reason` は `TryGetValue<string>()` 相当で検証し、型不一致を例外ではなくプロトコル不正として既存の 1 回リトライ経路へ流す。
+- [ ] 履歴ファイル名の衝突を防止する。
+    - 秒精度の `{yyyy-MM-dd_HHmmss}.json` に GUID またはミリ秒を追加し、作成時は衝突を検出して再生成する。
+- [ ] 表示中セッションを削除した場合の動作を明確化する。
+    - `Messages` もクリアして新規セッションへ移行するか、削除済み履歴が次回保存で復活しないよう表示中会話を履歴サービスから切り離す。
+- [ ] 承認カードを解決後の状態へ更新する。
+    - `AgentChatMessage` にプロパティ変更通知を実装し、Approve / Reject 後はチェックボックスとボタンを非表示または無効化する。
+- [ ] Agent Chat 再表示時に AI / compatibility 状態を再評価する。
+    - `_historyLoaded` による早期 return より前に `RefreshAvailability()` を実行し、compatibility 結果変更も Messenger で通知する。
+- [ ] AI 無効化時に進行中ターンをキャンセルする。
+    - `AiEnabledChangedMessage` で false を受信した場合は現在の CTS をキャンセルし、各反復と書き込みツール実行直前にも設定を再確認する。
+
+### P2: 仕様完了と品質改善
+
+- [ ] Agent Chat の NavigationView 項目を `AiEnabled && AgentCompatibilityOk` に応じて表示制御する。
+- [ ] 旧 Ask Curia UI を物理削除する。
+    - `CommandPaletteViewModel` の AskMode 状態、会話履歴、直接 `CuriaQueryService.AskAsync` を呼ぶ経路を削除する。
+    - `CommandPaletteWindow` の旧回答・引用パネルと関連イベント処理を削除する。
+    - `?` は Agent Chat への質問引き継ぎ専用とし、WikiPage の Wiki 専用チャットには影響を与えない。
+- [ ] `CuriaQueryService` の UI 専用 API を整理し、`ask_knowledge_base` のバックエンドとして必要な API のみ残す。
+- [ ] `append_to_file` の読み込み・全体書き戻し競合を防ぐ。
+    - ファイル単位の排他、最終更新時刻の確認、またはエンコーディング維持可能な排他的追記を実装する。
+- [ ] 同期的なファイル走査・Markdown 解析による UI フリーズを防ぐ。
+    - Wiki 検索、チームタスク解析、プロジェクトタスク解析などを UI スレッド外で実行し、長いループで CancellationToken を確認する。
+
+### 修正後の追加テスト観点
+
+- [ ] `workstream` に `..`、絶対パス、区切り文字、未知 ID を渡してもファイル作成・更新されないこと。
+- [ ] 管理ルート内から管理外を指す junction / symbolic link 経由の read / append が拒否されること。
+- [ ] config 内の API key / Asana token を含むファイルが `read_file` で取得できないこと。
+- [ ] CLI 実行中に Stop した後、CLI 子プロセスが残らないこと。
+- [ ] Undo の通信失敗・キャンセル後に同じ token で再試行できること。
+- [ ] アプリ起動後、Agent Chat を未表示のまま `?質問` を送っても履歴混入・二重送信・既存履歴上書きがないこと。
+- [ ] セッション A で自動承認後にセッション B をロードすると、書き込みツールが再度承認を要求すること。
+- [ ] OpenAI / Azure OpenAI で整数引数を持つ全ツールが native function calling から正常実行できること。
+- [ ] 型が不正な CLI JSON 応答が 1 回リトライされ、チャット全体が例外終了しないこと。
+- [ ] 同一秒に複数セッションを作成しても履歴が上書きされないこと。
+- [ ] Approve / Reject 後に承認カードが解決済み表示になり、再操作できないこと。
 
 ---
 

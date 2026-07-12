@@ -184,41 +184,47 @@ public class LlmClientService
         using var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start '{exe}'.");
 
-        if (useStdin)
-        {
-            await process.StandardInput.WriteAsync(inputText.AsMemory(), ct);
-            process.StandardInput.Close();
-        }
-
-        var outputTask = process.StandardOutput.ReadToEndAsync(ct);
-        var errorTask  = process.StandardError.ReadToEndAsync(ct);
-
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeoutCts.CancelAfter(TimeSpan.FromSeconds(300));
         try
         {
+            if (useStdin)
+            {
+                await process.StandardInput.WriteAsync(inputText.AsMemory(), ct);
+                process.StandardInput.Close();
+            }
+
+            var outputTask = process.StandardOutput.ReadToEndAsync(ct);
+            var errorTask  = process.StandardError.ReadToEndAsync(ct);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(300));
             await process.WaitForExitAsync(timeoutCts.Token);
+            var output = StripAnsi((await outputTask).Trim());
+            var error  = SanitizeCliText((await errorTask).Trim());
+
+            if (process.ExitCode != 0 && string.IsNullOrWhiteSpace(output))
+                throw new InvalidOperationException($"'{exe}' exited with code {process.ExitCode}: {error}");
+
+            if (settings.LlmProvider.Equals("claude_code", StringComparison.OrdinalIgnoreCase))
+                output = ExtractClaudeResponse(output);
+            else if (settings.LlmProvider.Equals("codex_cli", StringComparison.OrdinalIgnoreCase))
+                output = ExtractCodexResponse(output);
+            return output;
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            try { process.Kill(entireProcessTree: true); } catch { }
+            KillProcessTree(process);
+            if (ct.IsCancellationRequested) throw;
             throw new TimeoutException($"'{exe}' did not respond within 5 minutes.");
         }
+    }
 
-        var output = StripAnsi((await outputTask).Trim());
-        var error  = SanitizeCliText((await errorTask).Trim());
-
-        if (process.ExitCode != 0 && string.IsNullOrWhiteSpace(output))
-            throw new InvalidOperationException(
-                $"'{exe}' exited with code {process.ExitCode}: {error}");
-
-        // プロバイダ固有の出力パース
-        if (settings.LlmProvider.Equals("claude_code", StringComparison.OrdinalIgnoreCase))
-            output = ExtractClaudeResponse(output);
-        else if (settings.LlmProvider.Equals("codex_cli", StringComparison.OrdinalIgnoreCase))
-            output = ExtractCodexResponse(output);
-
-        return output;
+    private static void KillProcessTree(Process process)
+    {
+        try
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException) { }
+        catch (System.ComponentModel.Win32Exception) { }
     }
 
     // claude --print --output-format json  stdin にプロンプトを流す
@@ -481,33 +487,40 @@ public class LlmClientService
 
     private static JsonObject ParseToolParameters(string schema)
     {
-        try
+        // Legacy compact descriptors are normalized once into a strict JSON Schema.
+        // Do not silently publish an unconstrained schema: that makes provider-side
+        // function calls disagree with tool argument validation.
+        var normalizedSchema = schema.Replace(": optional number", ": \"optional number\"", StringComparison.OrdinalIgnoreCase);
+        if (JsonNode.Parse(normalizedSchema) is not JsonObject parsed)
+            throw new InvalidOperationException("Agent tool parameters must be a JSON object.");
+        if (parsed.ContainsKey("type"))
         {
-            if (JsonNode.Parse(schema) is not JsonObject parsed) throw new JsonException();
-            if (parsed.ContainsKey("type")) return parsed;
-
-            // Existing descriptors use a concise argument-description object.
-            // Convert it into the strict JSON Schema shape expected by the API.
-            var properties = new JsonObject();
-            var required = new JsonArray();
-            foreach (var (name, descriptionNode) in parsed)
-            {
-                var description = descriptionNode?.GetValue<string>() ?? "";
-                var type = name.Equals("minutes", StringComparison.OrdinalIgnoreCase) ? "integer" : "string";
-                properties[name] = new JsonObject { ["type"] = type, ["description"] = description };
-                if (description.Contains("required", StringComparison.OrdinalIgnoreCase)) required.Add(name);
-            }
-            var normalized = new JsonObject
-            {
-                ["type"] = "object",
-                ["properties"] = properties,
-                ["additionalProperties"] = false
-            };
-            if (required.Count > 0) normalized["required"] = required;
-            return normalized;
+            if (!string.Equals(parsed["type"]?.GetValue<string>(), "object", StringComparison.Ordinal)
+                || parsed["properties"] is not JsonObject)
+                throw new InvalidOperationException("Agent tool parameters must be an object JSON Schema.");
+            parsed["additionalProperties"] ??= false;
+            return parsed;
         }
-        catch (JsonException) { }
-        return new JsonObject { ["type"] = "object", ["additionalProperties"] = true };
+
+        var properties = new JsonObject();
+        var required = new JsonArray();
+        foreach (var (name, descriptionNode) in parsed)
+        {
+            var description = descriptionNode?.GetValue<string>()
+                ?? throw new InvalidOperationException($"Invalid description for agent tool parameter '{name}'.");
+            var type = name.Equals("minutes", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("limit", StringComparison.OrdinalIgnoreCase) ? "integer" : "string";
+            properties[name] = new JsonObject { ["type"] = type, ["description"] = description };
+            if (description.Contains("required", StringComparison.OrdinalIgnoreCase)) required.Add(name);
+        }
+        var result = new JsonObject
+        {
+            ["type"] = "object",
+            ["properties"] = properties,
+            ["additionalProperties"] = false
+        };
+        if (required.Count > 0) result["required"] = required;
+        return result;
     }
 
     private static NativeAgentCompletion ExtractNativeCompletion(string json)

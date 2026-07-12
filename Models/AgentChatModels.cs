@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.Json;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Curia.Models;
 
@@ -51,14 +52,14 @@ public class NativeAgentCompletion
 
 public enum AgentMessageKind { User, Assistant, ToolCall, ToolResult, Approval, Error }
 
-public class AgentChatMessage
+public partial class AgentChatMessage : ObservableObject
 {
     public AgentMessageKind Kind { get; set; }
-    public string Text { get; set; } = "";
+    [ObservableProperty] private string text = "";
     public AgentToolCall? ToolCall { get; set; }
     public string ToolResultContent { get; set; } = "";
-    public bool AutoApproveForSession { get; set; }
-    public bool IsApprovalResolved { get; set; }
+    [ObservableProperty] private bool autoApproveForSession;
+    [ObservableProperty] private bool isApprovalResolved;
     public DateTime Timestamp { get; set; } = DateTime.Now;
 
     public bool IsUser => Kind == AgentMessageKind.User;
@@ -67,6 +68,9 @@ public class AgentChatMessage
     public bool IsToolCall => Kind == AgentMessageKind.ToolCall;
     public bool IsToolResult => Kind == AgentMessageKind.ToolResult;
     public bool IsApproval => Kind == AgentMessageKind.Approval;
+    public bool IsApprovalPending => IsApproval && !IsApprovalResolved;
     public string DisplayText => ToolCall == null ? Text : $"{ToolCall.Tool}: {Text}";
     public string ToolArgumentsDisplay => ToolCall?.Arguments.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
+
+    partial void OnIsApprovalResolvedChanged(bool value) => OnPropertyChanged(nameof(IsApprovalPending));
 }
