@@ -97,6 +97,10 @@ public partial class WeekGridControl : WpfUserControl
     private int _allDayDragStartDay;
     private Popup? _allDayTaskPickerPopup;
     private DateTime _pendingAllDayStart;
+
+    // Outlook イベントツールチップ: ホバー中のイベント切り替え検知用
+    private Curia.Models.OutlookEvent? _lastTimedTooltipEvent;
+    private Curia.Models.OutlookEvent? _lastAllDayTooltipEvent;
     private DateTime _pendingAllDayEnd;
 
     // --- カラーマップ ---
@@ -839,6 +843,21 @@ public partial class WeekGridControl : WpfUserControl
             if (ev == null) { e.Handled = true; return; }
             timedTip.Content = BuildOutlookEventToolTipPanel(ev);
         };
+        // ToolTip は「同じ要素上に留まる限り一度しか開かない」ため、
+        // ホバー対象イベントが切り替わったタイミングで明示的に閉じて再オープンする。
+        TimeDropCanvas.PreviewMouseMove += (_, e) =>
+        {
+            var ev = FindOutlookTimedEventAt(e.GetPosition(TimeDropCanvas));
+            if (ReferenceEquals(ev, _lastTimedTooltipEvent)) return;
+            _lastTimedTooltipEvent = ev;
+            timedTip.IsOpen = false;
+            if (ev != null) timedTip.IsOpen = true;
+        };
+        TimeDropCanvas.MouseLeave += (_, _) =>
+        {
+            _lastTimedTooltipEvent = null;
+            timedTip.IsOpen = false;
+        };
 
         var allDayTip = new System.Windows.Controls.ToolTip();
         AllDayCanvas.ToolTip = allDayTip;
@@ -850,6 +869,19 @@ public partial class WeekGridControl : WpfUserControl
             var ev = FindOutlookAllDayEventAt(pos);
             if (ev == null) { e.Handled = true; return; }
             allDayTip.Content = BuildOutlookEventToolTipPanel(ev);
+        };
+        AllDayCanvas.PreviewMouseMove += (_, e) =>
+        {
+            var ev = FindOutlookAllDayEventAt(e.GetPosition(AllDayCanvas));
+            if (ReferenceEquals(ev, _lastAllDayTooltipEvent)) return;
+            _lastAllDayTooltipEvent = ev;
+            allDayTip.IsOpen = false;
+            if (ev != null) allDayTip.IsOpen = true;
+        };
+        AllDayCanvas.MouseLeave += (_, _) =>
+        {
+            _lastAllDayTooltipEvent = null;
+            allDayTip.IsOpen = false;
         };
     }
 
