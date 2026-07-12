@@ -65,7 +65,7 @@ public class GetTodayTasksTool : ICuriaAgentTool
     {
         Name = "get_today_tasks", IsAdvertised = false, DeprecatedSince = "2026-07-12", RiskLevel = ToolRiskLevel.ReadOnly,
         Description = "Gets prioritized outstanding tasks. Optionally filter bucket: overdue, today, soon, or normal.",
-        ParametersSchema = "{\"bucket\": \"optional: overdue|today|soon|normal\", \"limit\": " + "optional number" + "}"
+        ParametersSchema = "{\"bucket\":\"optional: overdue|today|soon|normal\",\"limit\":\"optional number\"}"
     };
     public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
     {
