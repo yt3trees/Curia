@@ -124,12 +124,12 @@
                         </ui:Button.Style>
                         <ui:SymbolIcon Symbol="NotebookAdd24" FontSize="18" Filled="False"/>
                     </ui:Button>
-                    <!-- Update Focus from Asana -->
+                    <!-- Update Focus -->
                     <ui:Button x:Name="UpdateFocusButton"
                                Padding="6,4"
                                Margin="0,0,4,0"
                                Command="{Binding UpdateFocusCommand}"
-                               ToolTip="Update Focus from Asana"
+                               ToolTip="Update Focus"
                                Visibility="{Binding IsAiEnabled, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <ui:Button.Style>
                             <Style TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">

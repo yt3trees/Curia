@@ -24,7 +24,7 @@ flowchart LR
 
     subgraph Editor ["📝 Updating & Logging (Editor)"]
         direction TB
-        UF["🎯 Update Focus<br>Sync focus from Asana status"]
+        UF["🎯 Update Focus<br>Sync focus from Asana + recent activity"]
         DL["⚖️ AI Decision Log<br>Appends structured logs"]
         IM["👥 Import Meeting Notes<br>Auto-extract tasks & decisions"]
     end
@@ -200,7 +200,7 @@ Press `Ctrl+Shift+C` from anywhere on your desktop to open a lightweight capture
 |---|---|
 | `task` | Creates a task in Asana via API (requires confirmation before submitting) |
 | `tension` | Appends to the project's `open_issues.md` |
-| `focus_update` | Opens Editor and triggers the Update Focus from Asana flow with your input as additional context |
+| `focus_update` | Opens Editor and triggers the Update Focus flow with your input as additional context |
 | `decision` | Opens Editor and launches the AI Decision Log flow |
 | `memo` | Appends a timestamped entry to `_config/capture_log.md` |
 
@@ -240,11 +240,11 @@ Today's Plan dialog provides a time-blocked day plan (for example, Morning / Aft
 ## Editor
 
 <a id="update-focus-from-asana-editor"></a>
-### Update Focus from Asana
+### Update Focus
 
-Click the `Update Focus from Asana` button in the Editor toolbar to generate a diff-based update proposal for the open `current_focus.md`. The model reads Asana task data and the existing file, then proposes changes while preserving your heading structure and writing style. A backup is saved to `focus_history/` automatically. Supports workstream filtering, natural-language refinement, and a debug view.
+Click the `Update Focus` button in the Editor toolbar to generate a diff-based update proposal for the open `current_focus.md`. The model reads Asana task data, recent activity signals (pinned folder files, dated work folders, git activity, quick captures), and the existing file, then proposes changes while preserving your heading structure and writing style. A backup is saved to `focus_history/` automatically. Supports workstream filtering, natural-language refinement, and a debug view.
 
-<img src="../_assets/ai-feature/UpdateFocusFromAsana.png" width="70%" alt="Update Focus from Asana dialog" />
+<img src="../_assets/ai-feature/UpdateFocusFromAsana.png" width="70%" alt="Update Focus dialog" />
 
 <a id="ai-decision-log-editor"></a>
 ### AI Decision Log

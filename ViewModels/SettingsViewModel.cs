@@ -156,6 +156,13 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool aiToggleCanEnable;
 
+    // Focus Auto-Update (行動シグナルからの current_focus 自動更新)
+    [ObservableProperty]
+    private bool focusAutoUpdateBadgeEnabled;
+
+    [ObservableProperty]
+    private int focusSignalLookbackDays;
+
     [ObservableProperty]
     private string agentCompatibilityStatus = "";
 
@@ -293,6 +300,8 @@ public partial class SettingsViewModel : ObservableObject
             LlmStatus          = "";
             AiEnabled          = settings.AiEnabled;
             AiToggleCanEnable  = settings.AiEnabled; // 既にオンなら再テスト不要
+            FocusAutoUpdateBadgeEnabled = settings.FocusAutoUpdateBadgeEnabled;
+            FocusSignalLookbackDays     = settings.FocusSignalLookbackDays;
             AgentCompatibilityStatus = settings.AgentCompatibilityCheckedFor == $"{settings.LlmProvider}|{settings.LlmModel}"
                 ? (settings.AgentCompatibilityOk ? "Compatible" : "Not compatible") : "Not checked for this provider/model";
             SilenceAlertEnabled    = settings.SilenceAlertEnabled;
@@ -403,6 +412,8 @@ public partial class SettingsViewModel : ObservableObject
         settings.LlmUserProfile = LlmUserProfile;
         settings.LlmLanguage    = LlmLanguage.Trim();
         settings.AiEnabled             = AiEnabled;
+        settings.FocusAutoUpdateBadgeEnabled = FocusAutoUpdateBadgeEnabled;
+        settings.FocusSignalLookbackDays     = FocusSignalLookbackDays > 0 ? FocusSignalLookbackDays : 14;
         InvalidateAgentCompatibilityIfProviderChanged(settings);
         settings.SilenceAlertEnabled   = SilenceAlertEnabled;
         settings.CaptureTaskLogEnabled = CaptureTaskLogEnabled;

@@ -11,7 +11,7 @@
 5. Add a `decision_log` entry if needed (when AI Features is enabled, the Dec Log button opens an AI-assisted dialog)
 6. If you have meeting notes from a recent meeting, click `Import Meeting Notes` in the Editor toolbar to analyze and apply them
 7. If using Asana, run `Asana Sync` to refresh task files
-8. If AI Features is enabled, click `Update Focus from Asana` in the Editor toolbar to get an LLM-generated update proposal
+8. If AI Features is enabled, click `Update Focus` in the Editor toolbar to get an LLM-generated update proposal
 
 ```mermaid
 flowchart TD
@@ -21,7 +21,7 @@ flowchart TD
     D --> E["Update context and save"]
     E --> F["Add decision_log entry (optional)"]
     F --> G["Run Asana Sync (optional)"]
-    G --> H["Update Focus from Asana (optional, AI)"]
+    G --> H["Update Focus (optional, AI)"]
 ```
 
 ## Task Management

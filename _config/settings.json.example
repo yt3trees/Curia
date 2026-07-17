@@ -17,5 +17,8 @@
   "llmApiKey": "sk-...",
   "llmModel": "gpt-4o",
   "llmEndpoint": "",
-  "llmApiVersion": "2024-12-01-preview"
+  "llmApiVersion": "2024-12-01-preview",
+  "aiEnabled": false,
+  "focusAutoUpdateBadgeEnabled": true,
+  "focusSignalLookbackDays": 14
 }

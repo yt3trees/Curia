@@ -24,7 +24,7 @@ flowchart LR
 
     subgraph Editor ["📝 更新・記録 (Editor)"]
         direction TB
-        UF["🎯 Update Focus<br>Asana情報から方針更新"]
+        UF["🎯 Update Focus<br>Asana情報+直近の行動から方針更新"]
         DL["⚖️ AI Decision Log<br>決定事項の構造化・記録"]
         IM["👥 Import Meeting Notes<br>打合せメモの自動仕分け"]
     end
@@ -200,7 +200,7 @@ current_focus.md の更新は既存のトーンを維持すること。
 |---|---|
 | `task` | Asana API でタスクを直接起票 (送信前に確認ステップあり) |
 | `tension` | プロジェクトの `open_issues.md` に追記 |
-| `focus_update` | Editor を開き、入力内容をコンテキストとして Update Focus from Asana フローを起動 |
+| `focus_update` | Editor を開き、入力内容をコンテキストとして Update Focus フローを起動 |
 | `decision` | Editor を開き、AI Decision Log フローを起動 |
 | `memo` | `_config/capture_log.md` にタイムスタンプ付きで追記 |
 
@@ -240,11 +240,11 @@ Today's Plan ダイアログ(AI)では、1日の提案を時間帯別(例: Morni
 ## Editor
 
 <a id="update-focus-from-asana-editor-ja"></a>
-### Update Focus from Asana
+### Update Focus
 
-Editor ツールバーの `Update Focus from Asana` ボタンをクリックすると、開いている `current_focus.md` の差分ベース更新提案を生成します。モデルは Asana タスクデータと既存ファイルを読み込み、見出し構造と文体を保持しながら変更案を提示します。バックアップは `focus_history/` に自動保存。Workstream 絞り込み・自然言語による再指示・デバッグ表示に対応しています。
+Editor ツールバーの `Update Focus` ボタンをクリックすると、開いている `current_focus.md` の差分ベース更新提案を生成します。モデルは Asana タスクデータ、行動シグナル(pinned folder のファイル・日付付き work フォルダ・git 活動・quick capture)、既存ファイルを読み込み、見出し構造と文体を保持しながら変更案を提示します。バックアップは `focus_history/` に自動保存。Workstream 絞り込み・自然言語による再指示・デバッグ表示に対応しています。
 
-<img src="../_assets/ai-feature/UpdateFocusFromAsana.png" width="70%" alt="Update Focus from Asana ダイアログ" />
+<img src="../_assets/ai-feature/UpdateFocusFromAsana.png" width="70%" alt="Update Focus ダイアログ" />
 
 <a id="ai-decision-log-editor-ja"></a>
 ### AI Decision Log

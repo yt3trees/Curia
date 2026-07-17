@@ -486,7 +486,7 @@
                     BorderThickness="1" CornerRadius="6"
                     Padding="16,12" Margin="0,0,0,6">
                 <StackPanel>
-                    <TextBlock Text="Used for Update Focus from Asana feature." FontSize="11"
+                    <TextBlock Text="Used for the Update Focus feature." FontSize="11"
                                Foreground="{DynamicResource AppSubtext0}" Margin="0,0,0,10"/>
 
                     <TextBlock Text="Provider" FontSize="12" Foreground="{DynamicResource AppSubtext0}"/>
@@ -687,6 +687,45 @@
                                Foreground="{DynamicResource AppSubtext0}"
                                FontSize="11"
                                Margin="0,2,0,0"/>
+                    <Separator Margin="0,8"/>
+                    <DockPanel LastChildFill="False">
+                        <TextBlock DockPanel.Dock="Left"
+                                   Text="Auto-update Focus"
+                                   Foreground="{DynamicResource AppText}"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"/>
+                        <ui:ToggleSwitch DockPanel.Dock="Right"
+                                         IsChecked="{Binding FocusAutoUpdateBadgeEnabled, Mode=TwoWay}"
+                                         IsEnabled="{Binding AiEnabled}"/>
+                    </DockPanel>
+                    <TextBlock Text="Show a Dashboard action that drafts current_focus.md updates from pinned folder / git / capture activity plus Asana tasks."
+                               Foreground="{DynamicResource AppSubtext0}"
+                               FontSize="11"
+                               Margin="0,2,0,0"/>
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Signal lookback (days)" FontSize="13"
+                                       Foreground="{DynamicResource AppText}"/>
+                            <TextBlock Text="How far back to scan pinned folder / git / capture activity (1-90)" FontSize="11"
+                                       Foreground="{DynamicResource AppSubtext0}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Slider Minimum="1" Maximum="90" TickFrequency="1"
+                                    IsSnapToTickEnabled="True" Width="160"
+                                    Value="{Binding FocusSignalLookbackDays, Mode=TwoWay}"
+                                    VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding FocusSignalLookbackDays}"
+                                       FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AppBlue}"
+                                       VerticalAlignment="Center"
+                                       Margin="10,0,0,0" Width="28"
+                                       TextAlignment="Right"/>
+                        </StackPanel>
+                    </Grid>
                 </StackPanel>
             </Border>
 

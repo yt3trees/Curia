@@ -36,7 +36,8 @@ public class FocusUpdateService
         ProjectInfo project,
         string? workstreamId,
         CancellationToken ct = default,
-        string? capturedContext = null)
+        string? capturedContext = null,
+        FocusActivitySignals? signals = null)
     {
         // Step 1: パス解決
         var (focusPath, asanaPath, workMode, resolvedWsId) =
@@ -82,8 +83,8 @@ public class FocusUpdateService
         }
 
         // Step 6: LLM に更新提案を生成させる
-        var systemPrompt = BuildSystemPrompt();
-        var userPrompt   = BuildUserPrompt(project.Name, workstreamId, currentContent, asanaTasks, projectSummary, workstreamTasks, capturedContext);
+        var systemPrompt = BuildSystemPrompt(signals);
+        var userPrompt   = BuildUserPrompt(project.Name, workstreamId, currentContent, asanaTasks, projectSummary, workstreamTasks, capturedContext, signals);
         var proposed     = await _llm.ChatCompletionAsync(systemPrompt, userPrompt, ct);
 
         // サマリ生成
@@ -178,7 +179,33 @@ public class FocusUpdateService
     // -----------------------------------------------------------------------
     // プロンプト設計
     // -----------------------------------------------------------------------
-    private static string BuildSystemPrompt() => """
+    private static string BuildSystemPrompt(FocusActivitySignals? signals = null)
+    {
+        var basePrompt = BaseSystemPrompt;
+        if (signals == null || signals.IsEmpty) return basePrompt;
+
+        return basePrompt + "\n\n" + """
+        ## Using activity signals
+
+        - Recent file activity, work folder names, git activity, and quick captures show what the user
+          actually worked on. Use them to judge freshness and priority for "What I'm working on",
+          alongside Asana task data.
+        - Never assert what was done based on a file name or commit message alone. Only write about
+          an activity when it clearly corresponds to an existing Asana task or an existing line in the
+          document. If a signal is ambiguous and cannot be matched to something concrete, skip it rather
+          than guessing.
+        - Recent work folder names (under shared/_work, formatted as "yyyy-MM-dd [scope] feature-name")
+          are a stronger signal than file names or commit messages, since the user typed the feature
+          name themselves when creating the folder. Still rephrase into natural prose — do not paste
+          the raw folder suffix (underscores/hyphens) verbatim.
+        - If an activity is genuinely new information (not covered by Asana tasks or existing document
+          content) and clearly meaningful, you may add a short natural-language line for it — never a
+          literal file name, folder suffix, or raw commit message. Apply the same rephrasing rules as
+          elsewhere.
+        """;
+    }
+
+    private const string BaseSystemPrompt = """
         You are an assistant that updates current_focus.md based on Asana task data.
 
         ## Output rules
@@ -235,7 +262,8 @@ public class FocusUpdateService
         AsanaTaskParseResult asanaTasks,
         string? projectSummary = null,
         IReadOnlyList<(string id, string label, AsanaTaskParseResult tasks)>? workstreamTasks = null,
-        string? capturedContext = null)
+        string? capturedContext = null,
+        FocusActivitySignals? signals = null)
     {
         var today = DateTime.Now.ToString("yyyy-MM-dd");
         var sb = new StringBuilder();
@@ -249,7 +277,7 @@ public class FocusUpdateService
 
         if (!string.IsNullOrWhiteSpace(capturedContext))
         {
-            sb.AppendLine("## User intent captured via Quick Capture (treat as priority context for this update)");
+            sb.AppendLine("## User-provided context (treat as priority context for this update)");
             sb.AppendLine(capturedContext.Trim());
             sb.AppendLine();
         }
@@ -399,12 +427,61 @@ public class FocusUpdateService
             }
         }
 
+        if (signals != null && !signals.IsEmpty)
+            AppendActivitySignals(sb, signals);
+
         sb.AppendLine();
         sb.AppendLine("## Instruction");
         sb.AppendLine("Apply the update rules to produce the complete updated current_focus.md.");
         sb.AppendLine("Output the full file content only. Do not include any explanation.");
 
         return sb.ToString();
+    }
+
+    private static void AppendActivitySignals(StringBuilder sb, FocusActivitySignals signals)
+    {
+        var sinceText = signals.Since.ToString("yyyy-MM-dd");
+
+        if (signals.PinnedFolderFiles.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"## Recent file activity (pinned folders — what the user actually touched, since {sinceText})");
+            foreach (var f in signals.PinnedFolderFiles)
+                sb.AppendLine($"- [{f.PinnedFolderLabel}] {f.RelativePath}  (modified: {f.ModifiedAt:yyyy-MM-dd})");
+        }
+
+        if (signals.RecentWorkFolders.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"## Recent work folders (dated work sessions under shared/_work, since {sinceText})");
+            foreach (var w in signals.RecentWorkFolders)
+            {
+                var scope = string.IsNullOrWhiteSpace(w.WorkstreamLabel) ? "general" : w.WorkstreamLabel;
+                sb.AppendLine($"- {w.Date:yyyy-MM-dd}  [{scope}] {w.FeatureName}");
+            }
+        }
+
+        if (signals.RecentCommits.Count > 0 || signals.UncommittedFiles.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"## Recent git activity (commits since {sinceText} / uncommitted files)");
+            foreach (var c in signals.RecentCommits)
+                sb.AppendLine($"- {c.Date}  [{c.RepoName}] {c.Message}");
+            if (signals.UncommittedFiles.Count > 0)
+            {
+                sb.AppendLine("Uncommitted files:");
+                foreach (var f in signals.UncommittedFiles)
+                    sb.AppendLine($"- {f}");
+            }
+        }
+
+        if (signals.Captures.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Recent quick captures mentioning this project");
+            foreach (var c in signals.Captures)
+                sb.AppendLine($"- [{c.Timestamp:yyyy-MM-dd HH:mm}] {c.Body}");
+        }
     }
 
     // -----------------------------------------------------------------------

@@ -43,6 +43,7 @@ public partial class EditorViewModel : ObservableObject
     private readonly FileEncodingService _encodingService;
     private readonly ProjectDiscoveryService _discoveryService;
     private readonly FocusUpdateService _focusUpdateService;
+    private readonly FocusSignalCollectorService _focusSignalCollectorService;
     private readonly LlmClientService _llmClient;
     private readonly ConfigService _configService;
     private readonly DecisionLogGeneratorService _decisionLogService;
@@ -149,6 +150,7 @@ public partial class EditorViewModel : ObservableObject
         FileEncodingService encodingService,
         ProjectDiscoveryService discoveryService,
         FocusUpdateService focusUpdateService,
+        FocusSignalCollectorService focusSignalCollectorService,
         LlmClientService llmClient,
         ConfigService configService,
         DecisionLogGeneratorService decisionLogService,
@@ -158,6 +160,7 @@ public partial class EditorViewModel : ObservableObject
         _encodingService = encodingService;
         _discoveryService = discoveryService;
         _focusUpdateService = focusUpdateService;
+        _focusSignalCollectorService = focusSignalCollectorService;
         _llmClient = llmClient;
         _configService = configService;
         _decisionLogService = decisionLogService;
@@ -1234,7 +1237,7 @@ Option :
     public void ToggleSearchBar() => IsSearchBarVisible = !IsSearchBarVisible;
 
     // =====================================================================
-    // Update Focus from Asana
+    // Update Focus
     // =====================================================================
 
     /// <summary>
@@ -1311,8 +1314,9 @@ Option :
         }
         try
         {
+            var signals = await _focusSignalCollectorService.CollectAsync(SelectedProject, _focusUpdateCts.Token);
             var result = await _focusUpdateService.GenerateProposalAsync(
-                SelectedProject, workstreamId, _focusUpdateCts.Token, capturedContext);
+                SelectedProject, workstreamId, _focusUpdateCts.Token, capturedContext, signals);
 
             if (RequestFocusUpdateApproval == null) return;
             var capturedResult = result;

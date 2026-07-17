@@ -105,6 +105,7 @@ public partial class App : WpfApplication
         services.AddSingleton<LlmClientService>();
         services.AddSingleton<AsanaTaskParser>();
         services.AddSingleton<FocusUpdateService>();
+        services.AddSingleton<FocusSignalCollectorService>();
         services.AddSingleton<DecisionLogGeneratorService>();
         services.AddSingleton<DecisionLogService>();
         services.AddSingleton<CaptureService>();

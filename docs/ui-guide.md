@@ -68,9 +68,9 @@ Tree-based file browser for AI context files (`current_focus.md`, `decision_log`
 
 ### AI Features in Editor
 
-<img src="../_assets/ai-feature/UpdateFocusFromAsana.png" width="60%" alt="Update Focus from Asana dialog" />
+<img src="../_assets/ai-feature/UpdateFocusFromAsana.png" width="60%" alt="Update Focus dialog" />
 
-Update Focus from Asana (AI) reads `tasks.md`, sends context to the configured LLM, and shows a diff-based proposal dialog; it supports workstream filtering, natural-language refinement, and `View Debug`, and saves a backup to `focus_history/`.
+Update Focus (AI) reads `tasks.md` and recent activity signals (pinned folder files, dated work folders, git activity, quick captures), sends context to the configured LLM, and shows a diff-based proposal dialog; it supports workstream filtering, natural-language refinement, and `View Debug`, and saves a backup to `focus_history/`.
 
 <img src="../_assets/ai-feature/AI-DecisionLog_1.png" width="60%" alt="AI Decision Log dialog step 1" />
 <img src="../_assets/ai-feature/AI-DecisionLog_2.png" width="60%" alt="AI Decision Log dialog step 2" />

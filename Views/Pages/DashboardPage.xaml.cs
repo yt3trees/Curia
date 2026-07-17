@@ -424,6 +424,45 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
             mw.NavigateToEditorAndOpenFile(card.Info, card.SummaryFile);
     }
 
+    private async void OnAutoUpdateFocusClickAsync(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not FrameworkElement { Tag: ProjectCardViewModel card }) return;
+        if (card.IsAutoUpdatingFocus) return;
+        if (Window.GetWindow(this) is not Window owner) return;
+
+        card.IsAutoUpdatingFocus = true;
+        using var cts = new System.Threading.CancellationTokenSource();
+        try
+        {
+            var result = await ViewModel.GenerateAutoUpdateFocusProposalAsync(card, cts.Token);
+            var refineHistory = new List<(string instruction, string result)>();
+
+            var (apply, content) = await Views.ProposalReviewDialog.ShowAsync(
+                owner, result, $"Auto-update Focus — {card.DisplayName}", "⟳",
+                refineFunc: async (_, instructions) =>
+                    await ViewModel.RefineAutoUpdateFocusProposalAsync(result, instructions, refineHistory, cts.Token));
+
+            if (!apply) return;
+
+            var finalContent = content ?? result.ProposedContent;
+            await ViewModel.ApplyAutoUpdateFocusProposalAsync(result, finalContent, cts.Token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show(
+                $"Auto-update focus failed:\n{ex.Message}",
+                "Auto-update Focus",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+        }
+        finally
+        {
+            card.IsAutoUpdatingFocus = false;
+        }
+    }
+
     private void OnActivityBarClick(object sender, MouseButtonEventArgs e)
     {
         if (sender is FrameworkElement { Tag: ProjectCardViewModel card })

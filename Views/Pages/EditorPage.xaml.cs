@@ -1159,7 +1159,7 @@ public partial class EditorPage : WpfUserControl, INavigableView<EditorViewModel
         return ProposalReviewDialog.ShowAsync(
             Window.GetWindow(this),
             proposal,
-            titleText:  "Update Focus from Asana",
+            titleText:  "Update Focus",
             titleIcon:  "⟳",
             extraInfo:  backupInfo,
             refineFunc: refineFunc);

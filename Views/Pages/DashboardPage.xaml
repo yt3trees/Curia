@@ -398,6 +398,52 @@
                                                 </StackPanel>
                                             </Border>
                                         </Button>
+                                        <!-- Auto-update focus (行動シグナル + Asana から current_focus.md のドラフトを自動生成) -->
+                                        <Button Grid.Column="0" Padding="2" Width="18" Height="18"
+                                                Margin="0,0,8,0" HorizontalAlignment="Right"
+                                                BorderThickness="0" Background="Transparent"
+                                                Cursor="Hand"
+                                                Tag="{Binding}"
+                                                Click="OnAutoUpdateFocusClickAsync"
+                                                ToolTip="Auto-update focus from recent activity + Asana">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="Bg" Background="Transparent" CornerRadius="9">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppSurface2}"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsPressed" Value="True">
+                                                            <Setter TargetName="Bg" Property="Background" Value="{DynamicResource AppSurface1}"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding IsFocusStale}" Value="True"/>
+                                                                <Condition Binding="{Binding DataContext.IsAiEnabled, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True"/>
+                                                                <Condition Binding="{Binding DataContext.FocusAutoUpdateBadgeEnabled, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True"/>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </MultiDataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <Grid>
+                                                <ui:SymbolIcon Symbol="ArrowSync24" FontSize="11"
+                                                               Foreground="{DynamicResource AppBlue}"
+                                                               Visibility="{Binding IsAutoUpdatingFocus, Converter={StaticResource InverseBoolToVisConverter}}"/>
+                                                <ui:ProgressRing IsIndeterminate="True" Width="12" Height="12"
+                                                                 Visibility="{Binding IsAutoUpdatingFocus, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                            </Grid>
+                                        </Button>
                                         <!-- Summary -->
                                         <Button Grid.Column="1" Padding="0" Margin="0"
                                                 BorderThickness="0" Background="Transparent"

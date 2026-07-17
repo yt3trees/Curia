@@ -37,6 +37,9 @@ public partial class ProjectCardViewModel : ObservableObject
     [ObservableProperty]
     private bool isHidden;
 
+    [ObservableProperty]
+    private bool isAutoUpdatingFocus;
+
     public ProjectInfo Info { get; }
 
     public string DisplayName => Info.DisplayName;
@@ -64,6 +67,9 @@ public partial class ProjectCardViewModel : ObservableObject
     // "fresh" | "ok" | "aging" | "stale" | "missing"
     public string FocusFreshness => GetFreshness(FocusAge);
     public string SummaryFreshness => GetFreshness(SummaryAge);
+    // FocusAge がある (current_focus.md が存在する) 前提で、fresh/ok (7日以内) を超えたら対象。
+    // 30日超で FocusFreshness が "missing" になるケースも含める。ファイル自体が無い場合は FocusAge が null なので対象外。
+    public bool IsFocusStale => FocusAge.HasValue && FocusAge.Value > 7;
 
     // ---- Workstream ----
     public ObservableCollection<WorkstreamCardItem> Workstreams { get; } = [];
@@ -162,6 +168,8 @@ public partial class DashboardViewModel : ObservableObject
     private readonly TodayQueueService _todayQueueService;
     private readonly StateSnapshotService _stateSnapshotService;
     private readonly SilenceAlertService _silenceAlertService;
+    private readonly FocusSignalCollectorService _focusSignalCollectorService;
+    private readonly FocusUpdateService _focusUpdateService;
     private System.Timers.Timer? _refreshTimer;
     private readonly AsyncInitializationGate _initialization = new();
     private List<string> _hiddenKeys = [];
@@ -221,6 +229,9 @@ public partial class DashboardViewModel : ObservableObject
     [ObservableProperty]
     private bool isAiEnabled;
 
+    [ObservableProperty]
+    private bool focusAutoUpdateBadgeEnabled;
+
     // ---------- Silence Alerts ----------
 
     [ObservableProperty]
@@ -243,13 +254,17 @@ public partial class DashboardViewModel : ObservableObject
         ConfigService configService,
         TodayQueueService todayQueueService,
         StateSnapshotService stateSnapshotService,
-        SilenceAlertService silenceAlertService)
+        SilenceAlertService silenceAlertService,
+        FocusSignalCollectorService focusSignalCollectorService,
+        FocusUpdateService focusUpdateService)
     {
         _discoveryService = discoveryService;
         _configService = configService;
         _todayQueueService = todayQueueService;
         _stateSnapshotService = stateSnapshotService;
         _silenceAlertService = silenceAlertService;
+        _focusSignalCollectorService = focusSignalCollectorService;
+        _focusUpdateService = focusUpdateService;
         var settings = configService.LoadSettings();
         AutoRefreshMinutes = settings.DashboardAutoRefreshMinutes;
         TodayQueueLimit = settings.DashboardTodayQueueLimit;
@@ -259,7 +274,8 @@ public partial class DashboardViewModel : ObservableObject
         foreach (var pf in _pinnedFoldersList) PinnedFolders.Add(pf);
         PinnedFolders.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasPinnedFolders));
 
-        IsAiEnabled = _configService.LoadSettings().AiEnabled;
+        IsAiEnabled = settings.AiEnabled;
+        FocusAutoUpdateBadgeEnabled = settings.FocusAutoUpdateBadgeEnabled;
         WeakReferenceMessenger.Default.Register<AiEnabledChangedMessage>(this,
             (_, msg) => IsAiEnabled = msg.Enabled);
 
@@ -328,6 +344,33 @@ public partial class DashboardViewModel : ObservableObject
             await RefreshAsync();
             SetupAutoRefresh();
         });
+
+    // ---------- Focus Auto-Update ----------
+
+    public async Task<FocusUpdateResult> GenerateAutoUpdateFocusProposalAsync(
+        ProjectCardViewModel card, CancellationToken ct)
+    {
+        var signals = await _focusSignalCollectorService.CollectAsync(card.Info, ct);
+        return await _focusUpdateService.GenerateProposalAsync(card.Info, workstreamId: null, ct, signals: signals);
+    }
+
+    public async Task<string> RefineAutoUpdateFocusProposalAsync(
+        FocusUpdateResult result,
+        string instructions,
+        List<(string instruction, string result)> refineHistory,
+        CancellationToken ct)
+    {
+        var refined = await _focusUpdateService.RefineAsync(
+            result.DebugUserPrompt, result.ProposedContent, instructions, refineHistory, ct);
+        refineHistory.Add((instructions, refined));
+        return refined;
+    }
+
+    public async Task ApplyAutoUpdateFocusProposalAsync(FocusUpdateResult result, string content, CancellationToken ct)
+    {
+        await _focusUpdateService.ApplyProposalAsync(result, content, ct);
+        await RefreshAsync(force: true);
+    }
 
     public async Task LoadTodayQueueAsync()
     {

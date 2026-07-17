@@ -11,7 +11,7 @@
 5. 必要なら `decision_log` を1件追加(AI機能有効時は Dec Log ボタンでAI支援ダイアログが開く)
 6. 直近の会議メモがあれば `Import Meeting Notes` ボタンで分析して取り込む
 7. Asanaを使う場合は `Asana Sync` を実行してToday Queueを更新
-8. AI機能が有効な場合は `Update Focus from Asana` ボタンでLLMによる更新提案を取得
+8. AI機能が有効な場合は `Update Focus` ボタンでLLMによる更新提案を取得
 
 ```mermaid
 flowchart TD
@@ -21,7 +21,7 @@ flowchart TD
     D --> E["文脈を更新して保存"]
     E --> F["decision_log追加(任意)"]
     F --> G["Asana Sync実行(任意)"]
-    G --> H["Update Focus from Asana(任意、AI)"]
+    G --> H["Update Focus(任意、AI)"]
 ```
 
 ## タスク管理

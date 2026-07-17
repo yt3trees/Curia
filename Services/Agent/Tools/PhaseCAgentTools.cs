@@ -14,17 +14,22 @@ public class UpdateCurrentFocusTool : ICuriaAgentTool
 {
     private readonly ProjectDiscoveryService _discovery;
     private readonly FocusUpdateService _focusUpdate;
+    private readonly FocusSignalCollectorService _focusSignalCollector;
     private readonly AgentUiActions _uiActions;
 
-    public UpdateCurrentFocusTool(ProjectDiscoveryService discovery, FocusUpdateService focusUpdate, AgentUiActions uiActions)
-        => (_discovery, _focusUpdate, _uiActions) = (discovery, focusUpdate, uiActions);
+    public UpdateCurrentFocusTool(
+        ProjectDiscoveryService discovery,
+        FocusUpdateService focusUpdate,
+        FocusSignalCollectorService focusSignalCollector,
+        AgentUiActions uiActions)
+        => (_discovery, _focusUpdate, _focusSignalCollector, _uiActions) = (discovery, focusUpdate, focusSignalCollector, uiActions);
 
     public AgentToolDescriptor Descriptor { get; } = new()
     {
         Name = "update_current_focus",
         CapabilityRequirements = AgentToolCapability.Asana | AgentToolCapability.UiReview,
         RiskLevel = ToolRiskLevel.Write,
-        Description = "Generates a current_focus.md update from Asana data. After approval, a diff review must be applied before any file is changed.",
+        Description = "Generates a current_focus.md update from Asana data plus recent activity signals (pinned folder files, work folders, git, quick captures). After approval, a diff review must be applied before any file is changed.",
         ParametersSchema = "{\"project\":\"required project name\",\"workstream\":\"optional workstream id\",\"context\":\"optional user context to prioritize\"}"
     };
 
@@ -38,11 +43,13 @@ public class UpdateCurrentFocusTool : ICuriaAgentTool
 
         var workstream = AgentToolArguments.String(arguments, "workstream");
         if (!AgentWorkstreamValidator.TryValidateWorkstream(project, workstream, out var validatedWorkstream, out error)) return Failure(error);
+        var signals = await _focusSignalCollector.CollectAsync(project, ct);
         var result = await _focusUpdate.GenerateProposalAsync(
             project,
             validatedWorkstream,
             ct,
-            AgentToolArguments.String(arguments, "context"));
+            AgentToolArguments.String(arguments, "context"),
+            signals);
 
         var refinementHistory = new List<(string instruction, string result)>();
         var (apply, content) = await _uiActions.ReviewFocusUpdateAsync(result, async (_, instructions) =>

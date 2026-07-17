@@ -74,7 +74,8 @@ MVVM + Dependency Injection (`Microsoft.Extensions.DependencyInjection`). All se
 | ScriptRunnerService | Runs PowerShell/Python scripts async; dispatches output to UI thread; cancellable |
 | LlmClientService | Sends chat completion requests to OpenAI or Azure OpenAI; reads provider/key/model/endpoint from settings; supports Test Connection |
 | AsanaTaskParser | Parses `tasks.md` into structured task lists for use in LLM prompts |
-| FocusUpdateService | Orchestrates the "Update Focus from Asana" flow: loads context files, builds prompt, calls LlmClientService, saves backup to `focus_history/`, and returns proposed diff |
+| FocusUpdateService | Orchestrates the "Update Focus" flow: loads context files (Asana tasks plus activity signals from FocusSignalCollectorService), builds prompt, calls LlmClientService, saves backup to `focus_history/`, and returns proposed diff |
+| FocusSignalCollectorService | Collects local-only activity signals for Update Focus: pinned folder file activity, dated `shared/_work` folders, git commits/uncommitted files, and matching `capture_log.md` entries within a lookback window |
 | DecisionLogService | Reads and parses decision log Markdown files from `_ai-context/decision_log/` (and per-workstream subdirs) |
 | DecisionLogGeneratorService | AI-driven decision log generation: detects candidates from focus_history diff, generates draft, refines via LLM in three separate async steps |
 | CaptureService | Global Capture orchestration: AI-classifies freeform input, creates Asana tasks (with dedup guard), appends to project files |
@@ -90,7 +91,7 @@ MVVM + Dependency Injection (`Microsoft.Extensions.DependencyInjection`). All se
 - Page navigation uses wpf-ui 3.x `INavigationService`. Cross-page navigation (e.g., Dashboard → Editor with a specific file) is done via callbacks set on ViewModels (`OnOpenInEditor`, `OnOpenInTimeline`) rather than direct service calls.
 - Markdown editing uses AvalonEdit with `Assets/Markdown.xshd` for syntax highlighting. EditorPage also has a diff view mode (DiffPlex) toggled via `IsDiffViewActive`; `DiffLineBackgroundRenderer` highlights changed lines against the original file content.
 - `GlobalUsings.cs` aliases WPF `Application` over WinForms to resolve namespace conflicts.
-- Cross-ViewModel communication uses CommunityToolkit.Mvvm `WeakReferenceMessenger`. `StatusUpdateMessage` broadcasts editor state (project, file, encoding, dirty flag) from `EditorViewModel` to `MainWindowViewModel` for status bar updates. `AiEnabledChangedMessage` is sent by `SettingsViewModel` when the "Enable AI Features" toggle changes, and received by `EditorViewModel` to show or hide the "Update Focus from Asana" toolbar button.
+- Cross-ViewModel communication uses CommunityToolkit.Mvvm `WeakReferenceMessenger`. `StatusUpdateMessage` broadcasts editor state (project, file, encoding, dirty flag) from `EditorViewModel` to `MainWindowViewModel` for status bar updates. `AiEnabledChangedMessage` is sent by `SettingsViewModel` when the "Enable AI Features" toggle changes, and received by `EditorViewModel` to show or hide the "Update Focus" toolbar button.
 
 ### Configuration
 

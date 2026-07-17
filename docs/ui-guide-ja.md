@@ -68,9 +68,9 @@ AI コンテキストファイル(`current_focus.md`、`decision_log` など)を
 
 ### EditorのAI機能
 
-<img src="../_assets/ai-feature/UpdateFocusFromAsana.png" width="60%" alt="Update Focus from Asana ダイアログ" />
+<img src="../_assets/ai-feature/UpdateFocusFromAsana.png" width="60%" alt="Update Focus ダイアログ" />
 
-Update Focus from Asana (AI) は `tasks.md` を読み込み、設定済み LLM に文脈を渡して差分提案ダイアログを表示します。Workstream 絞り込み、自然言語での再指示、`View Debug` に対応し、`focus_history/` へバックアップを保存します。
+Update Focus (AI) は `tasks.md` と行動シグナル(pinned folder のファイル・日付付き work フォルダ・git 活動・quick capture)を読み込み、設定済み LLM に文脈を渡して差分提案ダイアログを表示します。Workstream 絞り込み、自然言語での再指示、`View Debug` に対応し、`focus_history/` へバックアップを保存します。
 
 <img src="../_assets/ai-feature/AI-DecisionLog_1.png" width="60%" alt="AI Decision Log ダイアログ 1" />
 <img src="../_assets/ai-feature/AI-DecisionLog_2.png" width="60%" alt="AI Decision Log ダイアログ 2" />

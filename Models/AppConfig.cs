@@ -61,13 +61,15 @@ public class AppSettings
     public HotkeyConfig? CommandPaletteHotkey { get; set; }
     public AsanaSyncConfig? AsanaSync { get; set; }
 
-    // LLM API 設定 (Update Focus from Asana 機能用)
+    // LLM API 設定 (Update Focus 機能用)
     public string LlmProvider { get; set; } = "openai";         // "openai" | "azure_openai"
     public string LlmApiKey { get; set; } = "";
     public string LlmModel { get; set; } = "gpt-4o";
     public string LlmEndpoint { get; set; } = "";              // Azure OpenAI のエンドポイント URL
     public string LlmApiVersion { get; set; } = "2024-12-01-preview"; // Azure OpenAI の API バージョン
     public bool AiEnabled { get; set; } = false;               // AI 機能を有効にするか
+    public bool FocusAutoUpdateBadgeEnabled { get; set; } = true;  // Dashboard の Auto-update focus アクション表示
+    public int FocusSignalLookbackDays { get; set; } = 14;         // 行動シグナル収集期間の上限 (日)
     public int AgentMaxIterations { get; set; } = 10;
     public int AgentToolResultMaxChars { get; set; } = 30000;
     public bool AgentCompatibilityOk { get; set; } = false;
