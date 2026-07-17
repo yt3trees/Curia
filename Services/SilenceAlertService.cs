@@ -31,9 +31,13 @@ public class SilenceAlertService : IDisposable
         _todayQueueService = todayQueueService;
         _llmClient = llmClient;
 
-        var state = LoadState();
-        var now = DateTime.Now;
-        CurrentAlerts = FilterAlerts(state.Alerts, state, now);
+        var settings = _configService.LoadSettings();
+        if (settings.SilenceAlertEnabled)
+        {
+            var state = LoadState();
+            var now = DateTime.Now;
+            CurrentAlerts = FilterAlerts(state.Alerts, state, now);
+        }
 
         WeakReferenceMessenger.Default.Register<SilenceAlertEnabledChangedMessage>(this,
             (_, msg) =>

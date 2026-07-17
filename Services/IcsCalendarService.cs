@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Text;
 using Curia.Models;
 using Ical.Net;
 using Ical.Net.CalendarComponents;
@@ -14,7 +15,7 @@ public class IcsCalendarService
 {
     private static readonly HttpClient _http = new()
     {
-        Timeout = TimeSpan.FromSeconds(30),
+        Timeout = TimeSpan.FromSeconds(60),
     };
 
     // ICS コンテンツキャッシュ (URL 単位、TTL 10分)
@@ -42,7 +43,8 @@ public class IcsCalendarService
             }
             else
             {
-                icsContent = await _http.GetStringAsync(icsUrl);
+                var bytes = await _http.GetByteArrayAsync(icsUrl);
+                icsContent = DecodeIcsBytes(bytes);
                 _cachedUrl     = icsUrl;
                 _cachedContent = icsContent;
                 _cachedAt      = DateTime.Now;
@@ -62,6 +64,80 @@ public class IcsCalendarService
         _cachedUrl     = null;
         _cachedContent = null;
         _cachedAt      = DateTime.MinValue;
+    }
+
+    /// <summary>
+    /// BOM を優先して実際のバイト列からエンコーディングを判定する。
+    /// HttpClient の charset 自動判定 (レスポンスヘッダー依存) は実際の内容と食い違うことがあり、
+    /// UTF-16 で配信された ICS を UTF-8 として読むと文字化けして Ical.Net のパースが失敗するため。
+    /// </summary>
+    private static string DecodeIcsBytes(byte[] bytes)
+    {
+        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            return Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
+
+        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+            return Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
+
+        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+            return Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
+
+        try
+        {
+            var strictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+            return SanitizeInvalidEscapes(StripInvalidControlChars(UnfoldLines(strictUtf8.GetString(bytes))));
+        }
+        catch (DecoderFallbackException)
+        {
+            // BOM なしで UTF-8 として不正な場合、Exchange 系配信で見られる UTF-16 なしBOM を疑って再試行
+            return SanitizeInvalidEscapes(StripInvalidControlChars(UnfoldLines(Encoding.Unicode.GetString(bytes))));
+        }
+    }
+
+    /// <summary>
+    /// RFC 5545 の折り返し (CRLF + 単一の SPACE/TAB) をあらかじめ解除する。
+    /// エスケープ (\n など) の途中で折り返されるケースがあるため、SanitizeInvalidEscapes より前に行う必要がある。
+    /// </summary>
+    private static string UnfoldLines(string text)
+        => System.Text.RegularExpressions.Regex.Replace(text, "\r\n[ \t]|\n[ \t]", "");
+
+    /// <summary>
+    /// RFC 5545 は TAB/CR/LF 以外の C0 制御文字 (0x00-0x1F の一部) を許可しない。
+    /// 実際の Exchange/Teams 配信では、元データの破損によりこうした生の制御文字が
+    /// DESCRIPTION などの値に混入することがあり、Ical.Net のパースが失敗する原因になる。
+    /// </summary>
+    private static string StripInvalidControlChars(string text)
+        => System.Text.RegularExpressions.Regex.Replace(text, "[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]", "");
+
+    /// <summary>
+    /// RFC 5545 上有効なエスケープは \\ \; \, \N \n のみ。
+    /// Microsoft/Teams 系の ICS 配信では、元データの破損 (絵文字や特殊記号が U+FFFD 等に潰れる)
+    /// によって "\(" のような不正なエスケープが混入することがあり、Ical.Net はそのプロパティ行の
+    /// パースに失敗して該当週の全イベント取得が失敗してしまう。孤立したバックスラッシュを二重化して
+    /// リテラルなバックスラッシュとして扱われるようにし、他の正常なイベントの取得を壊さないようにする。
+    /// 折り返し解除後の文字列に対して呼び出すこと。
+    /// </summary>
+    private static string SanitizeInvalidEscapes(string text)
+    {
+        var sb = new StringBuilder(text.Length + 16);
+        for (int i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c == '\\' && i + 1 < text.Length)
+            {
+                var next = text[i + 1];
+                if (next is '\\' or ';' or ',' or 'N' or 'n')
+                {
+                    sb.Append(c).Append(next);
+                    i++;
+                    continue;
+                }
+                sb.Append('\\').Append('\\');
+                continue;
+            }
+            sb.Append(c);
+        }
+        return sb.ToString();
     }
 
     private static IReadOnlyList<OutlookEvent> ParseWeekEvents(

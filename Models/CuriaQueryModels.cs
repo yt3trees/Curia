@@ -6,7 +6,7 @@ public enum CuriaSourceType
     FocusHistory,
     Tasks,
     Wiki,
-    MeetingNotes,
+    ObsidianNotes,
 }
 
 public class CuriaCandidateMeta

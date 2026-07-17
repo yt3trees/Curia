@@ -263,7 +263,7 @@ public class SearchKnowledgeTool : ICuriaAgentTool
     {
         Name = "search_knowledge", RiskLevel = ToolRiskLevel.ReadOnly,
         Description = "Searches primary project knowledge and returns source citations without generating an LLM answer.",
-        ParametersSchema = "{\"query\":\"required search text\",\"source_types\":\"optional array: decision|wiki|task|focus|meeting\",\"project\":\"optional project name\",\"limit\":\"optional number\",\"include_content\":\"optional true|false\"}"
+        ParametersSchema = "{\"query\":\"required search text\",\"source_types\":\"optional array: decision|wiki|task|focus|notes\",\"project\":\"optional project name\",\"limit\":\"optional number\",\"include_content\":\"optional true|false\"}"
     };
 
     public async Task<AgentToolResult> ExecuteAsync(JsonObject arguments, CancellationToken ct)
@@ -274,9 +274,9 @@ public class SearchKnowledgeTool : ICuriaAgentTool
         var map = new Dictionary<string, CuriaSourceType>(StringComparer.OrdinalIgnoreCase)
         {
             ["decision"] = CuriaSourceType.DecisionLog, ["wiki"] = CuriaSourceType.Wiki, ["task"] = CuriaSourceType.Tasks,
-            ["focus"] = CuriaSourceType.FocusHistory, ["meeting"] = CuriaSourceType.MeetingNotes
+            ["focus"] = CuriaSourceType.FocusHistory, ["notes"] = CuriaSourceType.ObsidianNotes
         };
-        if (names.Any(name => !map.ContainsKey(name))) return new AgentToolResult { Success = false, Code = "invalid_source_type", Content = "source_types must contain decision, wiki, task, focus, or meeting.", DisplaySummary = "Invalid source type" };
+        if (names.Any(name => !map.ContainsKey(name))) return new AgentToolResult { Success = false, Code = "invalid_source_type", Content = "source_types must contain decision, wiki, task, focus, or notes.", DisplaySummary = "Invalid source type" };
         var matches = await _query.SearchSourcesAsync(query, names.Any() ? new CuriaQueryOptions { SourceTypes = names.Select(name => map[name]).ToList() } : null,
             AgentToolArguments.String(arguments, "project"), arguments["limit"]?.GetValue<int?>() ?? 20,
             arguments["include_content"]?.GetValue<bool?>() ?? false, ct);

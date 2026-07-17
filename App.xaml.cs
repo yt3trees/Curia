@@ -121,7 +121,7 @@ public partial class App : WpfApplication
         // Curia cross-project query
         services.AddSingleton<ICuriaSourceAdapter, DecisionLogSourceAdapter>();
         services.AddSingleton<ICuriaSourceAdapter, FocusHistorySourceAdapter>();
-        services.AddSingleton<ICuriaSourceAdapter, MeetingNotesSourceAdapter>();
+        services.AddSingleton<ICuriaSourceAdapter, ObsidianNotesSourceAdapter>();
         services.AddSingleton<ICuriaSourceAdapter, TasksSourceAdapter>();
         services.AddSingleton<ICuriaSourceAdapter, WikiSourceAdapter>();
         services.AddSingleton<CuriaQueryService>();
