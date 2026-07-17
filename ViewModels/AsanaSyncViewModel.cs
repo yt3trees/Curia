@@ -40,6 +40,9 @@ public partial class AsanaSyncViewModel : ObservableObject
 
     public ObservableCollection<SyncLogEntry> LogEntries { get; } = [];
 
+    // Auto Sync 有効時にログが無制限に増えて描画が重くなるのを防ぐ上限
+    private const int MaxLogEntries = 500;
+
     private string _lineBuffer = "";
 
     [ObservableProperty]
@@ -396,6 +399,9 @@ public partial class AsanaSyncViewModel : ObservableObject
                 _lineBuffer = _lineBuffer[(newlineIdx + 1)..];
                 LogEntries.Add(ParseLine(line));
             }
+
+            while (LogEntries.Count > MaxLogEntries)
+                LogEntries.RemoveAt(0);
         });
     }
 
