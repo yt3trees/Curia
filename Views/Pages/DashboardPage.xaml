@@ -868,6 +868,9 @@
                         <DataTrigger Binding="{Binding HasPinnedFolders}" Value="True">
                             <Setter Property="Visibility" Value="Visible"/>
                         </DataTrigger>
+                        <DataTrigger Binding="{Binding HasRemotePinCandidates}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </Border.Style>
@@ -877,6 +880,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0"
                                Text="📌 Pinned Folders"
@@ -884,6 +888,28 @@
                                Foreground="{DynamicResource AppSubtext0}"
                                VerticalAlignment="Center"/>
                     <Button Grid.Column="1"
+                            Content="{Binding RemotePinImportLabel}"
+                            FontSize="10"
+                            Padding="6,1"
+                            Margin="0,0,6,0"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource AppOverlay1}"
+                            BorderThickness="1"
+                            Foreground="{DynamicResource AppSubtext0}"
+                            Click="OnImportRemotePinsClick"
+                            ToolTip="Pin folders shared from another PC">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasRemotePinCandidates}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Grid.Column="2"
                             Content="Clear"
                             FontSize="10"
                             Padding="6,1"
@@ -915,7 +941,21 @@
                                     PreviewMouseMove="OnPinnedChipMouseMove"
                                     Drop="OnPinnedChipDrop"
                                     DragEnter="OnPinnedChipDragEnter"
-                                    DragLeave="OnPinnedChipDragLeave">
+                                    DragLeave="OnPinnedChipDragLeave"
+                                    ContextMenuOpening="OnPinnedChipContextMenuOpening">
+                                <Border.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Share to Remote"
+                                                  Click="OnSharePinClick"
+                                                  ToolTip="Register this pin in the project's shared folder so other PCs can import it"/>
+                                        <MenuItem Header="Remove from Remote"
+                                                  Click="OnUnsharePinClick"
+                                                  ToolTip="Remove this pin from the project's shared folder (local pin is kept)"/>
+                                        <Separator/>
+                                        <MenuItem Header="Unpin"
+                                                  Click="OnUnpinFromMenuClick"/>
+                                    </ContextMenu>
+                                </Border.ContextMenu>
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Style.Triggers>
@@ -926,6 +966,23 @@
                                     </Style>
                                 </Border.Style>
                                 <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="Cloud24"
+                                                   FontSize="11"
+                                                   Margin="0,0,4,0"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource AppSubtext0}"
+                                                   ToolTip="Shared to remote (available on other PCs)">
+                                        <ui:SymbolIcon.Style>
+                                            <Style TargetType="{x:Type ui:SymbolIcon}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsShared}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ui:SymbolIcon.Style>
+                                    </ui:SymbolIcon>
                                     <StackPanel Margin="0,0,6,0" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding ProjectLabel}"
                                                    FontSize="9"

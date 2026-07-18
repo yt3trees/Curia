@@ -119,6 +119,7 @@ public partial class App : WpfApplication
         services.AddSingleton<CaptureService>();
         services.AddSingleton<MeetingNotesService>();
         services.AddSingleton<StateSnapshotService>();
+        services.AddSingleton<SharedPinService>();
         services.AddSingleton<AgentHubService>();
         services.AddSingleton<AgentDeploymentService>();
         services.AddSingleton<WikiService>();

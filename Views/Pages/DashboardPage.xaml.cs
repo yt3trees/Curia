@@ -2438,6 +2438,188 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
     private void OnClearPinnedFolders(object sender, RoutedEventArgs e)
         => ViewModel.ClearPinnedFolders();
 
+    // ===== Pinned Folders リモート共有 (PC 間同期) =====
+
+    private void OnPinnedChipContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not Border { DataContext: PinnedFolder pf, ContextMenu: { } menu }) return;
+        // Items: [Share to Remote, Remove from Remote, Separator, Unpin]
+        if (menu.Items.Count < 2) return;
+        if (menu.Items[0] is System.Windows.Controls.MenuItem share)
+            share.Visibility = pf.IsShared ? Visibility.Collapsed : Visibility.Visible;
+        if (menu.Items[1] is System.Windows.Controls.MenuItem unshare)
+            unshare.Visibility = pf.IsShared ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnSharePinClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PinnedFolder pf })
+            ViewModel.SharePinnedFolder(pf);
+    }
+
+    private void OnUnsharePinClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PinnedFolder pf })
+            ViewModel.UnsharePinnedFolder(pf);
+    }
+
+    private void OnUnpinFromMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PinnedFolder pf })
+            ViewModel.UnpinFolder(pf);
+    }
+
+    private void OnImportRemotePinsClick(object sender, RoutedEventArgs e)
+    {
+        var candidates = ViewModel.GetRemotePinCandidates();
+        if (candidates.Count == 0) return;
+        ShowRemotePinImportDialog(candidates);
+    }
+
+    private void ShowRemotePinImportDialog(List<RemotePinCandidate> candidates)
+    {
+        var appResources = Application.Current.Resources;
+        var surface = (System.Windows.Media.Brush)appResources["AppSurface0"];
+        var surface1 = (System.Windows.Media.Brush)appResources["AppSurface1"];
+        var surface2 = (System.Windows.Media.Brush)appResources["AppSurface2"];
+        var text = (System.Windows.Media.Brush)appResources["AppText"];
+        var subtext = (System.Windows.Media.Brush)appResources["AppSubtext0"];
+        var accent = appResources.Contains("AppOverlay2")
+            ? (System.Windows.Media.Brush)appResources["AppOverlay2"]
+            : text;
+
+        var listBox = new System.Windows.Controls.ListBox
+        {
+            Margin = new Thickness(0, 10, 0, 0),
+            MinHeight = 80,
+            MaxHeight = 260,
+            Background = surface1,
+            Foreground = text,
+            BorderBrush = surface2,
+            BorderThickness = new Thickness(1),
+            FontSize = 12,
+            SelectionMode = System.Windows.Controls.SelectionMode.Multiple,
+            DisplayMemberPath = nameof(RemotePinCandidate.DisplayLabel),
+            ItemsSource = candidates,
+        };
+        foreach (var candidate in candidates)
+            listBox.SelectedItems.Add(candidate);
+
+        var titleBar = new Grid { Background = surface1, Height = 38 };
+        titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var titleIcon = new System.Windows.Controls.TextBlock
+        {
+            Text = "☁", Foreground = accent, FontSize = 13,
+            Margin = new Thickness(12, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(titleIcon, 0);
+
+        var titleText = new System.Windows.Controls.TextBlock
+        {
+            Text = "Import Remote Pins", Foreground = text, FontSize = 14,
+            FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(titleText, 1);
+
+        var closeButton = new System.Windows.Controls.Button
+        {
+            Content = "✕", Width = 34, Height = 26,
+            Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Center,
+            Background = System.Windows.Media.Brushes.Transparent,
+            BorderThickness = new Thickness(0), Foreground = subtext, FontSize = 13
+        };
+        Grid.SetColumn(closeButton, 2);
+
+        titleBar.Children.Add(titleIcon);
+        titleBar.Children.Add(titleText);
+        titleBar.Children.Add(closeButton);
+
+        var helper = new System.Windows.Controls.TextBlock
+        {
+            Text = "Pins shared from other PCs. Select the ones to add on this PC:",
+            Foreground = subtext, FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        var contentPanel = new StackPanel
+        {
+            Margin = new Thickness(16, 12, 16, 8),
+            Children = { helper, listBox }
+        };
+
+        var importButton = new Wpf.Ui.Controls.Button
+        {
+            Content = "Import Selected",
+            Appearance = Wpf.Ui.Controls.ControlAppearance.Primary,
+            MinWidth = 120, Height = 32,
+            Margin = new Thickness(0, 0, 8, 0), IsDefault = true
+        };
+        var cancelButton = new Wpf.Ui.Controls.Button
+        {
+            Content = "Cancel",
+            Appearance = Wpf.Ui.Controls.ControlAppearance.Secondary,
+            MinWidth = 100, Height = 32, IsCancel = true
+        };
+
+        var footer = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+            Margin = new Thickness(16, 0, 16, 12),
+            Children = { importButton, cancelButton }
+        };
+
+        var root = new Grid { Background = surface };
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetRow(titleBar, 0);
+        Grid.SetRow(contentPanel, 1);
+        Grid.SetRow(footer, 2);
+        root.Children.Add(titleBar);
+        root.Children.Add(contentPanel);
+        root.Children.Add(footer);
+
+        var owner = Window.GetWindow(this);
+        var dialogWindow = new Window
+        {
+            Title = "",
+            Owner = owner,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            ResizeMode = ResizeMode.NoResize,
+            SizeToContent = SizeToContent.Height,
+            WindowStyle = WindowStyle.None,
+            MinHeight = 0,
+            MinWidth = 480, Width = 480,
+            Background = surface,
+            Foreground = text,
+            BorderBrush = surface2,
+            BorderThickness = new Thickness(1),
+            Content = root
+        };
+
+        importButton.Click += (_, _) =>
+        {
+            var selected = listBox.SelectedItems.Cast<RemotePinCandidate>().ToList();
+            if (selected.Count == 0) return;
+            ViewModel.ImportRemotePins(selected);
+            dialogWindow.DialogResult = true;
+            dialogWindow.Close();
+        };
+        cancelButton.Click += (_, _) => { dialogWindow.DialogResult = false; dialogWindow.Close(); };
+        closeButton.Click += (_, _) => { dialogWindow.DialogResult = false; dialogWindow.Close(); };
+        titleBar.MouseLeftButtonDown += (_, ev) =>
+        {
+            if (ev.LeftButton == MouseButtonState.Pressed) dialogWindow.DragMove();
+        };
+
+        _ = dialogWindow.ShowDialog();
+    }
+
     private async void OnPinWorkstreamFolderClick(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement fe) return;

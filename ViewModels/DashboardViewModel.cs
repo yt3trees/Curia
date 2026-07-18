@@ -171,6 +171,7 @@ public partial class DashboardViewModel : ObservableObject
     private readonly FocusSignalCollectorService _focusSignalCollectorService;
     private readonly FocusUpdateService _focusUpdateService;
     private readonly ProposalInboxService _proposalInboxService;
+    private readonly SharedPinService _sharedPinService;
     private System.Timers.Timer? _refreshTimer;
     private readonly AsyncInitializationGate _initialization = new();
     private List<string> _hiddenKeys = [];
@@ -266,7 +267,8 @@ public partial class DashboardViewModel : ObservableObject
         SilenceAlertService silenceAlertService,
         FocusSignalCollectorService focusSignalCollectorService,
         FocusUpdateService focusUpdateService,
-        ProposalInboxService proposalInboxService)
+        ProposalInboxService proposalInboxService,
+        SharedPinService sharedPinService)
     {
         _discoveryService = discoveryService;
         _configService = configService;
@@ -276,6 +278,7 @@ public partial class DashboardViewModel : ObservableObject
         _focusSignalCollectorService = focusSignalCollectorService;
         _focusUpdateService = focusUpdateService;
         _proposalInboxService = proposalInboxService;
+        _sharedPinService = sharedPinService;
         var settings = configService.LoadSettings();
         AutoRefreshMinutes = settings.DashboardAutoRefreshMinutes;
         TodayQueueLimit = settings.DashboardTodayQueueLimit;
@@ -350,6 +353,8 @@ public partial class DashboardViewModel : ObservableObject
             await LoadPendingProposalsAsync();
             // State Snapshot をバックグラウンドで書き出す
             _ = _stateSnapshotService.ExportAsync(list);
+            // リモート共有ピンの状態をバックグラウンドで更新
+            _ = RefreshSharedPinStateAsync();
         }
         finally
         {
@@ -714,6 +719,7 @@ public partial class DashboardViewModel : ObservableObject
         _pinnedFoldersList.Add(pf);
         _configService.SavePinnedFolders(_pinnedFoldersList);
         Application.Current.Dispatcher.Invoke(() => PinnedFolders.Add(pf));
+        _ = RefreshSharedPinStateAsync();
     }
 
     public void MovePinnedFolder(PinnedFolder source, PinnedFolder target)
@@ -732,6 +738,7 @@ public partial class DashboardViewModel : ObservableObject
         _pinnedFoldersList.Remove(pf);
         _configService.SavePinnedFolders(_pinnedFoldersList);
         PinnedFolders.Remove(pf);
+        _ = RefreshSharedPinStateAsync();
     }
 
     public void ClearPinnedFolders()
@@ -739,6 +746,7 @@ public partial class DashboardViewModel : ObservableObject
         _pinnedFoldersList.Clear();
         _configService.SavePinnedFolders(_pinnedFoldersList);
         PinnedFolders.Clear();
+        _ = RefreshSharedPinStateAsync();
     }
 
     public void OpenPinnedFolder(PinnedFolder pf)
@@ -751,6 +759,124 @@ public partial class DashboardViewModel : ObservableObject
                 "Folder Not Found",
                 System.Windows.MessageBoxButton.OK,
                 System.Windows.MessageBoxImage.Information);
+    }
+
+    // ---------- Pinned Folders: リモート共有 (PC 間同期) ----------
+
+    private List<RemotePinCandidate> _remotePinCandidates = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRemotePinCandidates))]
+    [NotifyPropertyChangedFor(nameof(RemotePinImportLabel))]
+    private int remotePinCandidateCount;
+
+    public bool HasRemotePinCandidates => RemotePinCandidateCount > 0;
+
+    public string RemotePinImportLabel => $"Import Remote ({RemotePinCandidateCount})";
+
+    public List<RemotePinCandidate> GetRemotePinCandidates() => [.. _remotePinCandidates];
+
+    private string? GetProjectPath(string projectName)
+        => _allCards.FirstOrDefault(c =>
+            string.Equals(c.Info.Name, projectName, StringComparison.OrdinalIgnoreCase))?.Info.Path;
+
+    /// <summary>
+    /// ローカルピンの共有済みフラグと、他 PC からの取り込み候補を再計算する。
+    /// </summary>
+    public async Task RefreshSharedPinStateAsync()
+    {
+        try
+        {
+            var projects = _allCards.Select(c => (c.Info.Name, c.Info.Path)).ToList();
+            var pathByProject = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (name, path) in projects)
+                pathByProject.TryAdd(name, path);
+
+            var pins = _pinnedFoldersList.ToList();
+            var flags = await Task.Run(() =>
+            {
+                var entriesByProject = new Dictionary<string, List<SharedPinEntry>>(StringComparer.OrdinalIgnoreCase);
+                var result = new List<(PinnedFolder Pin, bool IsShared)>();
+                foreach (var pf in pins)
+                {
+                    if (!pathByProject.TryGetValue(pf.Project, out var projectPath))
+                    {
+                        result.Add((pf, false));
+                        continue;
+                    }
+                    if (!entriesByProject.TryGetValue(pf.Project, out var entries))
+                    {
+                        entries = _sharedPinService.LoadSharedPins(projectPath);
+                        entriesByProject[pf.Project] = entries;
+                    }
+                    result.Add((pf, entries.Any(e => SharedPinService.Matches(e, pf))));
+                }
+                return result;
+            });
+
+            var candidates = await _sharedPinService.CollectCandidatesAsync(projects, pins);
+
+            Application.Current?.Dispatcher.Invoke(() =>
+            {
+                foreach (var (pin, isShared) in flags)
+                    pin.IsShared = isShared;
+                _remotePinCandidates = candidates;
+                RemotePinCandidateCount = candidates.Count;
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Dashboard] RefreshSharedPinStateAsync failed: {ex}");
+        }
+    }
+
+    /// <summary>ピンをプロジェクトの shared 側設定に登録し、他 PC から取り込めるようにする。</summary>
+    public void SharePinnedFolder(PinnedFolder pf)
+    {
+        var projectPath = GetProjectPath(pf.Project);
+        if (projectPath == null || !_sharedPinService.SharePin(projectPath, pf))
+        {
+            System.Windows.MessageBox.Show(
+                "Could not share this pin. The project's shared folder was not found.",
+                "Share Pin to Remote",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Warning);
+            return;
+        }
+        pf.IsShared = true;
+    }
+
+    /// <summary>ピンの shared 側登録を解除する (ローカルのピンは残る)。</summary>
+    public void UnsharePinnedFolder(PinnedFolder pf)
+    {
+        var projectPath = GetProjectPath(pf.Project);
+        if (projectPath == null) return;
+        _sharedPinService.UnsharePin(projectPath, pf);
+        pf.IsShared = false;
+    }
+
+    /// <summary>他 PC が共有したピンをローカルの Pinned Folders に取り込む。</summary>
+    public void ImportRemotePins(IEnumerable<RemotePinCandidate> selected)
+    {
+        var added = false;
+        foreach (var candidate in selected.ToList())
+        {
+            var alreadyPinned = _pinnedFoldersList.Any(p =>
+                string.Equals(p.Project, candidate.Pin.Project, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(p.Workstream, candidate.Pin.Workstream, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(p.Folder, candidate.Pin.Folder, StringComparison.OrdinalIgnoreCase));
+            if (!alreadyPinned)
+            {
+                candidate.Pin.IsShared = true;
+                _pinnedFoldersList.Add(candidate.Pin);
+                PinnedFolders.Add(candidate.Pin);
+                added = true;
+            }
+            _remotePinCandidates.Remove(candidate);
+        }
+        if (added)
+            _configService.SavePinnedFolders(_pinnedFoldersList);
+        RemotePinCandidateCount = _remotePinCandidates.Count;
     }
 
     public async Task<List<(string FolderName, string FullPath)>> GetRecentWorkFoldersAsync(string projectPath, string? workstreamId, int limit = 10)
