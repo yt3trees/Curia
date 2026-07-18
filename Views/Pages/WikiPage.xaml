@@ -129,6 +129,42 @@
                 </MultiTrigger>
             </Style.Triggers>
         </Style>
+
+        <Style x:Key="WikiCardButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource AppSurface1}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppText}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppSurface2}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="CardBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource AppSurface2}"/>
+                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource AppBlue}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource AppSurface0}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="12,8,12,40">
@@ -147,8 +183,17 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Column="0" Text="Wiki" FontSize="18" FontWeight="SemiBold"
-                       Foreground="{DynamicResource AppText}" VerticalAlignment="Center"/>
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <TextBlock Text="Wiki" FontSize="18" FontWeight="SemiBold"
+                           Foreground="{DynamicResource AppText}" VerticalAlignment="Center"/>
+                <ui:Button Command="{Binding ReturnToWikiLandingCommand}"
+                           ToolTip="Back to Wiki list"
+                           Visibility="{Binding IsLanding, Converter={StaticResource InverseBoolToVis}}"
+                           Margin="8,0,0,0"
+                           Padding="6,3">
+                    <ui:SymbolIcon Symbol="Home24" FontSize="15"/>
+                </ui:Button>
+            </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <TextBlock Text="Project:" VerticalAlignment="Center" Margin="0,0,6,0"
@@ -211,7 +256,8 @@
         <Border Grid.Row="1"
                 Background="{DynamicResource AppSurface1}"
                 CornerRadius="6,6,0,0"
-                Padding="6,4">
+            Padding="6,4"
+            Visibility="{Binding IsLanding, Converter={StaticResource InverseBoolToVis}}">
             <StackPanel Orientation="Horizontal">
                 <Button x:Name="PagesTabBtn"
                         Style="{StaticResource WikiTabBtnStyle}"
@@ -292,10 +338,10 @@
                     </Style>
                 </Grid.Style>
 
-                <!-- Case 1: No project selected -->
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <StackPanel.Style>
-                        <Style TargetType="StackPanel">
+                <!-- Case 1: Wiki landing -->
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid">
                             <Setter Property="Visibility" Value="Collapsed"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsProjectSelected}" Value="False">
@@ -303,17 +349,109 @@
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
-                    </StackPanel.Style>
-                    <ui:SymbolIcon Symbol="Library24" FontSize="48"
-                                   Foreground="{DynamicResource AppSurface2}"
-                                   HorizontalAlignment="Center" Margin="0,0,0,12"/>
-                    <TextBlock Text="No Project Selected"
-                               FontSize="14" Foreground="{DynamicResource AppSubtext0}"
-                               HorizontalAlignment="Center" Margin="0,0,0,4"/>
-                    <TextBlock Text="Select a project from the dropdown above to start."
-                               FontSize="11" Foreground="{DynamicResource AppOverlay1}"
-                               HorizontalAlignment="Center"/>
-                </StackPanel>
+                    </Grid.Style>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="16,14,16,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Select a Wiki"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource AppText}"/>
+                            <TextBlock Text="Open a Wiki by project and domain."
+                                       FontSize="11" Foreground="{DynamicResource AppSubtext0}"
+                                       Margin="0,3,0,0"/>
+                        </StackPanel>
+                        <ui:Button Grid.Column="1"
+                                   Command="{Binding RefreshWikiCardsCommand}"
+                                   IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBoolConverter}}"
+                                   ToolTip="Refresh Wiki cards"
+                                   Padding="8,4">
+                            <ui:SymbolIcon Symbol="ArrowSync24" FontSize="15"/>
+                        </ui:Button>
+                    </Grid>
+
+                    <Grid Grid.Row="1" Margin="16,0,16,16">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Visibility="{Binding HasWikiCards, Converter={StaticResource BoolToVis}}">
+                            <ItemsControl ItemsSource="{Binding WikiCards}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource WikiCardButtonStyle}"
+                                                Command="{Binding DataContext.SelectWikiCommand,
+                                                          RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{Binding CardTitle}"
+                                                Width="220" Height="132"
+                                                Margin="0,0,12,12">
+                                            <Grid Margin="12">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="*"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <TextBlock Text="{Binding ProjectName}"
+                                                           FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource AppText}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding ProjectName}"/>
+                                                <TextBlock Grid.Row="1" Text="{Binding Domain}"
+                                                           FontSize="15" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource AppBlue}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip="{Binding Domain}"/>
+                                                <TextBlock Grid.Row="2" Text="{Binding PageCountText}"
+                                                           FontSize="11" Foreground="{DynamicResource AppSubtext0}"/>
+                                                <TextBlock Grid.Row="3" Text="{Binding LastUpdatedText}"
+                                                           FontSize="10" Foreground="{DynamicResource AppOverlay1}"
+                                                           Margin="0,4,0,0"/>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                    Visibility="{Binding HasWikiCards, Converter={StaticResource InverseBoolToVis}}">
+                            <ui:SymbolIcon Symbol="Library24" FontSize="48"
+                                           Foreground="{DynamicResource AppSurface2}"
+                                           HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                            <TextBlock Text="No Wiki Found"
+                                       FontSize="14" Foreground="{DynamicResource AppSubtext0}"
+                                       HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                            <TextBlock Text="Select a project above to initialize or open a Wiki domain."
+                                       FontSize="11" Foreground="{DynamicResource AppOverlay1}"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+
+                        <Border Background="{DynamicResource AppSurface0}"
+                                Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <ui:ProgressRing Width="24" Height="24" IsIndeterminate="True"
+                                                 HorizontalAlignment="Center"/>
+                                <TextBlock Text="Loading Wiki cards..."
+                                           Margin="0,8,0,0" FontSize="12"
+                                           Foreground="{DynamicResource AppSubtext0}"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
 
                 <!-- Case 2: Project selected but no domain selected -->
                 <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">

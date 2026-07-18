@@ -61,6 +61,40 @@ public class WikiLintIssueViewModel
     };
 }
 
+public sealed class WikiCardViewModel
+{
+    public WikiCardViewModel(ProjectInfo project, string domain, string wikiRoot, int pageCount, DateTime? lastUpdated)
+    {
+        Project = project;
+        Domain = domain;
+        WikiRoot = wikiRoot;
+        PageCount = pageCount;
+        LastUpdated = lastUpdated;
+    }
+
+    public ProjectInfo Project { get; }
+    public string Domain { get; }
+    public string WikiRoot { get; }
+    public int PageCount { get; }
+    public DateTime? LastUpdated { get; }
+    public string ProjectName => Project.DisplayName;
+    public string CardTitle => $"{ProjectName} / {Domain}";
+    public string PageCountText => $"{PageCount} {(PageCount == 1 ? "page" : "pages")}";
+    public string LastUpdatedText => LastUpdated.HasValue
+        ? FormatLastUpdated(LastUpdated.Value)
+        : "No updates";
+
+    private static string FormatLastUpdated(DateTime lastUpdated)
+    {
+        var elapsed = DateTime.Now - lastUpdated;
+        if (elapsed.TotalMinutes < 1) return "Updated just now";
+        if (elapsed.TotalHours < 1) return $"Updated {(int)elapsed.TotalMinutes}m ago";
+        if (elapsed.TotalDays < 1) return $"Updated {(int)elapsed.TotalHours}h ago";
+        if (elapsed.TotalDays < 7) return $"Updated {(int)elapsed.TotalDays}d ago";
+        return $"Updated {lastUpdated:yyyy-MM-dd}";
+    }
+}
+
 // ────────────────────────────────────────────────────
 // WikiViewModel
 // ────────────────────────────────────────────────────
@@ -83,6 +117,7 @@ public partial class WikiViewModel : ObservableObject
 
     // ── プロジェクト選択 ──────────────────────────────
     [ObservableProperty] private ObservableCollection<ProjectInfo> projects = [];
+    [ObservableProperty] private ObservableCollection<WikiCardViewModel> wikiCards = [];
     [ObservableProperty] private ProjectInfo? selectedProject;
     [ObservableProperty] private ObservableCollection<string> domains = [];
     [ObservableProperty] private string? selectedDomain;
@@ -183,6 +218,8 @@ public partial class WikiViewModel : ObservableObject
 
     public bool IsProjectSelected => SelectedProject != null;
     public bool IsDomainSelected  => !string.IsNullOrEmpty(SelectedDomain);
+    public bool IsLanding => SelectedProject == null;
+    public bool HasWikiCards => WikiCards.Count > 0;
 
     public WikiViewModel(
         ProjectDiscoveryService discovery,
@@ -232,18 +269,99 @@ public partial class WikiViewModel : ObservableObject
         IsLoading = true;
         try
         {
-            var all = await _discovery.GetProjectInfoListAsync(force: false);
-            var hidden = _config.LoadHiddenProjects();
-            var visible = all.Where(p => !hidden.Contains(p.HiddenKey)).ToList();
-
-            Projects.Clear();
-            foreach (var p in visible) Projects.Add(p);
-            // SelectedProject = Projects[0]; // 自動選択を停止 (AC-68)
+            await LoadProjectsAndWikiCardsAsync(force: false);
         }
         finally { IsLoading = false; }
     }
 
     public Task EnsureInitializedAsync() => _initialization.EnsureAsync(InitAsync);
+
+    private async Task LoadProjectsAndWikiCardsAsync(bool force)
+    {
+        var all = await _discovery.GetProjectInfoListAsync(force);
+        var hidden = _config.LoadHiddenProjects();
+        var visible = all.Where(project => !hidden.Contains(project.HiddenKey)).ToList();
+        var selectedKey = SelectedProject?.HiddenKey;
+
+        Projects.Clear();
+        foreach (var project in visible)
+            Projects.Add(project);
+
+        if (selectedKey != null)
+            SelectedProject = Projects.FirstOrDefault(project => project.HiddenKey == selectedKey);
+
+        await LoadWikiCardsAsync(visible);
+    }
+
+    private async Task LoadWikiCardsAsync(IReadOnlyCollection<ProjectInfo> visibleProjects)
+    {
+        var cards = await Task.Run(() =>
+        {
+            var result = new List<WikiCardViewModel>();
+
+            foreach (var project in visibleProjects)
+            {
+                string? contextPath;
+                try
+                {
+                    contextPath = GetContextPath(project);
+                    if (contextPath == null) continue;
+
+                    var domains = WikiService.GetDomains(contextPath);
+                    foreach (var domain in domains)
+                    {
+                        try
+                        {
+                            var wikiRoot = WikiService.GetWikiRoot(contextPath, domain);
+                            var pages = _wikiService.GetAllPages(wikiRoot);
+                            var pageCount = pages.Count(page => !page.IsRoot);
+                            var lastUpdated = pages.Count > 0
+                                ? pages.Max(page => page.LastModified)
+                                : (DateTime?)null;
+
+                            result.Add(new WikiCardViewModel(
+                                project,
+                                domain,
+                                wikiRoot,
+                                pageCount,
+                                lastUpdated));
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Wiki card scan skipped '{project.Name}/{domain}': {ex.Message}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Wiki card scan skipped project '{project.Name}': {ex.Message}");
+                }
+            }
+
+            return result
+                .OrderBy(card => card.ProjectName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(card => card.Domain, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        });
+
+        WikiCards.Clear();
+        foreach (var card in cards)
+            WikiCards.Add(card);
+        OnPropertyChanged(nameof(HasWikiCards));
+    }
+
+    [RelayCommand]
+    private async Task RefreshWikiCards()
+    {
+        if (IsLoading) return;
+
+        IsLoading = true;
+        try
+        {
+            await LoadProjectsAndWikiCardsAsync(force: true);
+        }
+        finally { IsLoading = false; }
+    }
 
     // ────────────────────────────────────────────────
     // プロジェクト変更
@@ -252,6 +370,7 @@ public partial class WikiViewModel : ObservableObject
     partial void OnSelectedProjectChanged(ProjectInfo? value)
     {
         OnPropertyChanged(nameof(IsProjectSelected));
+        OnPropertyChanged(nameof(IsLanding));
         if (value == null) { HasWiki = false; WikiRoot = ""; Domains.Clear(); SelectedDomain = null; return; }
 
         var contextPath = GetContextPath(value);
@@ -269,6 +388,7 @@ public partial class WikiViewModel : ObservableObject
 
     partial void OnSelectedDomainChanged(string? value)
     {
+        OnPropertyChanged(nameof(IsDomainSelected));
         if (SelectedProject == null || string.IsNullOrEmpty(value))
         {
             HasWiki = false;
@@ -324,6 +444,45 @@ public partial class WikiViewModel : ObservableObject
 
     [RelayCommand] private void ShowCreateDomain() => IsCreatingNewDomain = true;
     [RelayCommand] private void CancelCreateDomain() => IsCreatingNewDomain = false;
+
+    [RelayCommand]
+    private void ReturnToWikiLanding()
+    {
+        ActiveTab = WikiTab.Pages;
+        IsCreatingNewDomain = false;
+        SelectedProject = null;
+    }
+
+    [RelayCommand]
+    private void SelectWiki(WikiCardViewModel? card)
+    {
+        if (card == null) return;
+
+        var targetProject = Projects.FirstOrDefault(project => project.HiddenKey == card.Project.HiddenKey);
+        if (targetProject == null) return;
+
+        var contextPath = GetContextPath(targetProject);
+        if (contextPath == null) return;
+
+        string? targetDomain;
+        try
+        {
+            targetDomain = WikiService.GetDomains(contextPath)
+                .FirstOrDefault(domain => string.Equals(domain, card.Domain, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Wiki card selection failed '{card.CardTitle}': {ex.Message}");
+            return;
+        }
+
+        if (targetDomain == null) return;
+
+        ActiveTab = WikiTab.Pages;
+        IsCreatingNewDomain = false;
+        SelectedProject = targetProject;
+        SelectedDomain = targetDomain;
+    }
 
     // ────────────────────────────────────────────────
     // Pages タブ
@@ -888,6 +1047,7 @@ public partial class WikiViewModel : ObservableObject
             SelectedDomain = domain;
             NewWikiDomain = "";
             IsCreatingNewDomain = false;
+            await LoadWikiCardsAsync(Projects.ToList());
             StatusText = $"Wiki domain '{domain}' initialized.";
         }
         catch (Exception ex)
