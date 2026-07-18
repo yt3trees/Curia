@@ -245,6 +245,7 @@
                             <MenuItem Header="Claude" Tag="claude" Click="OnWikiTermMenuAgent"/>
                             <MenuItem Header="Gemini" Tag="gemini" Click="OnWikiTermMenuAgent"/>
                             <MenuItem Header="Codex"  Tag="codex"  Click="OnWikiTermMenuAgent"/>
+                            <MenuItem Header="Copilot" Tag="copilot" Click="OnWikiTermMenuAgent"/>
                         </ContextMenu>
                     </ui:Button.ContextMenu>
                     <ui:SymbolIcon Symbol="WindowConsole20" FontSize="16"/>
