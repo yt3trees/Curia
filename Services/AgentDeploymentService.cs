@@ -274,7 +274,7 @@ public class AgentDeploymentService
             if (string.IsNullOrWhiteSpace(basePath))
                 throw new InvalidOperationException($"Base path for {cli} is not configured.");
             skillsBaseDir = cli == CliTarget.Copilot
-                ? Path.Combine(basePath, ".github", "skills")
+                ? Path.Combine(basePath, ".copilot", "skills")
                 : Path.Combine(basePath, "skills");
         }
         else
@@ -287,9 +287,9 @@ public class AgentDeploymentService
 
             if (cli == CliTarget.Copilot)
             {
-                var githubDir = Path.Combine(targetDir, ".github");
-                var resolved = ResolveJunctionTarget(githubDir);
-                skillsBaseDir = Path.Combine(resolved ?? githubDir, "skills");
+                var copilotDir = Path.Combine(targetDir, ".copilot");
+                var resolved = ResolveJunctionTarget(copilotDir);
+                skillsBaseDir = Path.Combine(resolved ?? copilotDir, "skills");
             }
             else
             {
@@ -455,7 +455,7 @@ public class AgentDeploymentService
                 throw new InvalidOperationException($"Base path for {cli} is not configured.");
 
             return cli == CliTarget.Copilot
-                ? Path.Combine(basePath, ".github", "agents")
+                ? Path.Combine(basePath, ".copilot", "agents")
                 : Path.Combine(basePath, "agents");
         }
 
@@ -467,9 +467,9 @@ public class AgentDeploymentService
 
         if (cli == CliTarget.Copilot)
         {
-            var githubDir = Path.Combine(targetDir, ".github");
-            var resolvedGithub = ResolveJunctionTarget(githubDir);
-            return Path.Combine(resolvedGithub ?? githubDir, "agents");
+            var copilotDir = Path.Combine(targetDir, ".copilot");
+            var resolvedCopilot = ResolveJunctionTarget(copilotDir);
+            return Path.Combine(resolvedCopilot ?? copilotDir, "agents");
         }
 
         var cliDirName = cli switch
