@@ -163,6 +163,19 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int focusSignalLookbackDays;
 
+    // Proposal Inbox (バックグラウンドの Focus 更新提案生成)
+    [ObservableProperty]
+    private bool proposalInboxEnabled;
+
+    [ObservableProperty]
+    private int proposalScanIntervalHours = 4;
+
+    [ObservableProperty]
+    private int proposalMaxPerDay = 3;
+
+    [ObservableProperty]
+    private bool proposalBalloonEnabled = true;
+
     [ObservableProperty]
     private string agentCompatibilityStatus = "";
 
@@ -302,6 +315,10 @@ public partial class SettingsViewModel : ObservableObject
             AiToggleCanEnable  = settings.AiEnabled; // 既にオンなら再テスト不要
             FocusAutoUpdateBadgeEnabled = settings.FocusAutoUpdateBadgeEnabled;
             FocusSignalLookbackDays     = settings.FocusSignalLookbackDays;
+            ProposalInboxEnabled        = settings.ProposalInboxEnabled;
+            ProposalScanIntervalHours   = settings.ProposalScanIntervalHours;
+            ProposalMaxPerDay           = settings.ProposalMaxPerDay;
+            ProposalBalloonEnabled      = settings.ProposalBalloonEnabled;
             AgentCompatibilityStatus = settings.AgentCompatibilityCheckedFor == $"{settings.LlmProvider}|{settings.LlmModel}"
                 ? (settings.AgentCompatibilityOk ? "Compatible" : "Not compatible") : "Not checked for this provider/model";
             SilenceAlertEnabled    = settings.SilenceAlertEnabled;
@@ -414,6 +431,10 @@ public partial class SettingsViewModel : ObservableObject
         settings.AiEnabled             = AiEnabled;
         settings.FocusAutoUpdateBadgeEnabled = FocusAutoUpdateBadgeEnabled;
         settings.FocusSignalLookbackDays     = FocusSignalLookbackDays > 0 ? FocusSignalLookbackDays : 14;
+        settings.ProposalInboxEnabled        = ProposalInboxEnabled;
+        settings.ProposalScanIntervalHours   = ProposalScanIntervalHours > 0 ? ProposalScanIntervalHours : 4;
+        settings.ProposalMaxPerDay           = ProposalMaxPerDay > 0 ? ProposalMaxPerDay : 3;
+        settings.ProposalBalloonEnabled      = ProposalBalloonEnabled;
         InvalidateAgentCompatibilityIfProviderChanged(settings);
         settings.SilenceAlertEnabled   = SilenceAlertEnabled;
         settings.CaptureTaskLogEnabled = CaptureTaskLogEnabled;
@@ -511,6 +532,40 @@ public partial class SettingsViewModel : ObservableObject
         settings.SilenceAlertEnabled = value;
         _configService.SaveSettings(settings);
         WeakReferenceMessenger.Default.Send(new SilenceAlertEnabledChangedMessage(value));
+    }
+
+    partial void OnProposalInboxEnabledChanged(bool value)
+    {
+        if (_loading) return;
+        var settings = _configService.LoadSettings();
+        settings.ProposalInboxEnabled = value;
+        _configService.SaveSettings(settings);
+        WeakReferenceMessenger.Default.Send(new ProposalInboxSettingsChangedMessage());
+    }
+
+    partial void OnProposalBalloonEnabledChanged(bool value)
+    {
+        if (_loading) return;
+        var settings = _configService.LoadSettings();
+        settings.ProposalBalloonEnabled = value;
+        _configService.SaveSettings(settings);
+    }
+
+    partial void OnProposalScanIntervalHoursChanged(int value)
+    {
+        if (_loading) return;
+        var settings = _configService.LoadSettings();
+        settings.ProposalScanIntervalHours = value > 0 ? value : 4;
+        _configService.SaveSettings(settings);
+        WeakReferenceMessenger.Default.Send(new ProposalInboxSettingsChangedMessage());
+    }
+
+    partial void OnProposalMaxPerDayChanged(int value)
+    {
+        if (_loading) return;
+        var settings = _configService.LoadSettings();
+        settings.ProposalMaxPerDay = value > 0 ? value : 3;
+        _configService.SaveSettings(settings);
     }
 
     partial void OnIcsCalendarEnabledChanged(bool value)

@@ -170,6 +170,7 @@ public partial class DashboardViewModel : ObservableObject
     private readonly SilenceAlertService _silenceAlertService;
     private readonly FocusSignalCollectorService _focusSignalCollectorService;
     private readonly FocusUpdateService _focusUpdateService;
+    private readonly ProposalInboxService _proposalInboxService;
     private System.Timers.Timer? _refreshTimer;
     private readonly AsyncInitializationGate _initialization = new();
     private List<string> _hiddenKeys = [];
@@ -240,6 +241,14 @@ public partial class DashboardViewModel : ObservableObject
 
     public bool HasSilenceAlerts => SilenceAlerts.Count > 0;
 
+    // ---------- Proposal Inbox ----------
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPendingProposals))]
+    private ObservableCollection<ProposalItem> pendingProposals = [];
+
+    public bool HasPendingProposals => PendingProposals.Count > 0;
+
     public int AutoRefreshMinutes { get; set; }
     public int TodayQueueLimit { get; set; }
 
@@ -256,7 +265,8 @@ public partial class DashboardViewModel : ObservableObject
         StateSnapshotService stateSnapshotService,
         SilenceAlertService silenceAlertService,
         FocusSignalCollectorService focusSignalCollectorService,
-        FocusUpdateService focusUpdateService)
+        FocusUpdateService focusUpdateService,
+        ProposalInboxService proposalInboxService)
     {
         _discoveryService = discoveryService;
         _configService = configService;
@@ -265,6 +275,7 @@ public partial class DashboardViewModel : ObservableObject
         _silenceAlertService = silenceAlertService;
         _focusSignalCollectorService = focusSignalCollectorService;
         _focusUpdateService = focusUpdateService;
+        _proposalInboxService = proposalInboxService;
         var settings = configService.LoadSettings();
         AutoRefreshMinutes = settings.DashboardAutoRefreshMinutes;
         TodayQueueLimit = settings.DashboardTodayQueueLimit;
@@ -277,7 +288,13 @@ public partial class DashboardViewModel : ObservableObject
         IsAiEnabled = settings.AiEnabled;
         FocusAutoUpdateBadgeEnabled = settings.FocusAutoUpdateBadgeEnabled;
         WeakReferenceMessenger.Default.Register<AiEnabledChangedMessage>(this,
-            (_, msg) => IsAiEnabled = msg.Enabled);
+            (_, msg) =>
+            {
+                IsAiEnabled = msg.Enabled;
+                _ = LoadPendingProposalsAsync();
+            });
+        WeakReferenceMessenger.Default.Register<ProposalInboxChangedMessage>(this,
+            (_, _) => _ = LoadPendingProposalsAsync());
 
         SilenceAlerts = new ObservableCollection<SilenceAlert>(_silenceAlertService.CurrentAlerts);
         _silenceAlertService.AlertsUpdated += OnSilenceAlertsUpdated;
@@ -329,6 +346,8 @@ public partial class DashboardViewModel : ObservableObject
             ApplyFilter();
             // Today Queue もキャッシュ済みリストで更新
             await LoadTodayQueueInternalAsync(list);
+            // Proposal Inbox の Pending 一覧を更新
+            await LoadPendingProposalsAsync();
             // State Snapshot をバックグラウンドで書き出す
             _ = _stateSnapshotService.ExportAsync(list);
         }
@@ -371,6 +390,53 @@ public partial class DashboardViewModel : ObservableObject
         await _focusUpdateService.ApplyProposalAsync(result, content, ct);
         await RefreshAsync(force: true);
     }
+
+    // ---------- Proposal Inbox ----------
+
+    /// <summary>Pending 提案を読み込む。表示前に陳腐化チェックを行う。</summary>
+    public async Task LoadPendingProposalsAsync()
+    {
+        try
+        {
+            var aiEnabled = _configService.LoadSettings().AiEnabled;
+            var pending = new List<ProposalItem>();
+            if (aiEnabled)
+            {
+                await _proposalInboxService.ExpireStaleAsync();
+                pending = await _proposalInboxService.LoadPendingAsync();
+            }
+            Application.Current?.Dispatcher.Invoke(() =>
+                PendingProposals = new ObservableCollection<ProposalItem>(pending));
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Dashboard] LoadPendingProposalsAsync failed: {ex}");
+        }
+    }
+
+    /// <summary>
+    /// 提案を適用する。適用直前に陳腐化を再チェックし、ズレていたら適用せず Expired に落とす。
+    /// </summary>
+    public async Task<(bool ok, string message)> AcceptProposalAsync(
+        ProposalItem item, string content, CancellationToken ct = default)
+    {
+        if (ProposalInboxService.IsStale(item))
+        {
+            await _proposalInboxService.UpdateStatusAsync(item, ProposalStatus.Expired);
+            return (false, "This proposal has expired: current_focus.md was modified after it was generated.");
+        }
+
+        await _focusUpdateService.ApplyProposalAsync(item.ToFocusUpdateResult(), content, ct);
+        await _proposalInboxService.UpdateStatusAsync(item, ProposalStatus.Accepted);
+        await RefreshAsync(force: true);
+        return (true, "Proposal applied.");
+    }
+
+    public Task RejectProposalAsync(ProposalItem item)
+        => _proposalInboxService.UpdateStatusAsync(item, ProposalStatus.Rejected);
+
+    public Task ExpireProposalAsync(ProposalItem item)
+        => _proposalInboxService.UpdateStatusAsync(item, ProposalStatus.Expired);
 
     public async Task LoadTodayQueueAsync()
     {

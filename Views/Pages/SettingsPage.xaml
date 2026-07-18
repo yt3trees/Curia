@@ -726,6 +726,85 @@
                                        TextAlignment="Right"/>
                         </StackPanel>
                     </Grid>
+                    <Separator Margin="0,8"/>
+                    <DockPanel LastChildFill="False">
+                        <TextBlock DockPanel.Dock="Left"
+                                   Text="Proposal Inbox"
+                                   Foreground="{DynamicResource AppText}"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"/>
+                        <ui:ToggleSwitch DockPanel.Dock="Right"
+                                         IsChecked="{Binding ProposalInboxEnabled, Mode=TwoWay}"
+                                         IsEnabled="{Binding AiEnabled}"/>
+                    </DockPanel>
+                    <TextBlock Text="Generate focus update proposals in the background for projects with recent activity, and collect them for review (tray badge + Dashboard card)."
+                               Foreground="{DynamicResource AppSubtext0}"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Margin="0,2,0,0"/>
+                    <StackPanel IsEnabled="{Binding ProposalInboxEnabled}">
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Scan interval (hours)" FontSize="13"
+                                           Foreground="{DynamicResource AppText}"/>
+                                <TextBlock Text="How often to scan projects and generate proposals (1-24)" FontSize="11"
+                                           Foreground="{DynamicResource AppSubtext0}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Slider Minimum="1" Maximum="24" TickFrequency="1"
+                                        IsSnapToTickEnabled="True" Width="160"
+                                        Value="{Binding ProposalScanIntervalHours, Mode=TwoWay}"
+                                        VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ProposalScanIntervalHours}"
+                                           FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AppBlue}"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,0,0" Width="28"
+                                           TextAlignment="Right"/>
+                            </StackPanel>
+                        </Grid>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Max proposals per day" FontSize="13"
+                                           Foreground="{DynamicResource AppText}"/>
+                                <TextBlock Text="Upper limit of LLM generations per day (1-10)" FontSize="11"
+                                           Foreground="{DynamicResource AppSubtext0}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Slider Minimum="1" Maximum="10" TickFrequency="1"
+                                        IsSnapToTickEnabled="True" Width="160"
+                                        Value="{Binding ProposalMaxPerDay, Mode=TwoWay}"
+                                        VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ProposalMaxPerDay}"
+                                           FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AppBlue}"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,0,0" Width="28"
+                                           TextAlignment="Right"/>
+                            </StackPanel>
+                        </Grid>
+                        <DockPanel LastChildFill="False" Margin="0,8,0,0">
+                            <TextBlock DockPanel.Dock="Left"
+                                       Text="Balloon notification"
+                                       Foreground="{DynamicResource AppText}"
+                                       FontSize="13"
+                                       VerticalAlignment="Center"/>
+                            <ui:ToggleSwitch DockPanel.Dock="Right"
+                                             IsChecked="{Binding ProposalBalloonEnabled, Mode=TwoWay}"/>
+                        </DockPanel>
+                        <TextBlock Text="Show a tray balloon when a new proposal is generated."
+                                   Foreground="{DynamicResource AppSubtext0}"
+                                   FontSize="11"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

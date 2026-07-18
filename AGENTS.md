@@ -76,6 +76,8 @@ MVVM + Dependency Injection (`Microsoft.Extensions.DependencyInjection`). All se
 | AsanaTaskParser | Parses `tasks.md` into structured task lists for use in LLM prompts |
 | FocusUpdateService | Orchestrates the "Update Focus" flow: loads context files (Asana tasks plus activity signals from FocusSignalCollectorService), builds prompt, calls LlmClientService, saves backup to `focus_history/`, and returns proposed diff |
 | FocusSignalCollectorService | Collects local-only activity signals for Update Focus: pinned folder file activity, dated `shared/_work` folders, git commits/uncommitted files, and matching `capture_log.md` entries within a lookback window |
+| ProposalInboxService | Persistent inbox for background-generated AI proposals at `[config_dir]\proposals\*.json` (archive in `_archive\`, 30-day retention); tracks Pending count, expires proposals whose target file was manually edited, broadcasts `ProposalInboxChangedMessage` |
+| ProposalSchedulerService | Timer-based background generation of Focus update proposals: selects projects whose activity signals are newer than current_focus.md, honors per-day generation cap and pending-duplicate guard, feeds results into ProposalInboxService |
 | DecisionLogService | Reads and parses decision log Markdown files from `_ai-context/decision_log/` (and per-workstream subdirs) |
 | DecisionLogGeneratorService | AI-driven decision log generation: detects candidates from focus_history diff, generates draft, refines via LLM in three separate async steps |
 | CaptureService | Global Capture orchestration: AI-classifies freeform input, creates Asana tasks (with dedup guard), appends to project files |

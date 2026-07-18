@@ -63,6 +63,12 @@ public partial class App : WpfApplication
         var asanaSync = _serviceProvider.GetRequiredService<AsanaSyncViewModel>();
         asanaSync.StartScheduler();
 
+        // Proposal Inbox: 陳腐化チェック + アーカイブ整理 + スケジューラ起動
+        var proposalInbox = _serviceProvider.GetRequiredService<ProposalInboxService>();
+        _ = proposalInbox.InitializeAsync();
+        var proposalScheduler = _serviceProvider.GetRequiredService<ProposalSchedulerService>();
+        proposalScheduler.StartScheduler();
+
         // MainWindow 表示
         var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
         // 画面外に配置してから Show() することで、DWM 初期化時のフラッシュを防ぐ。
@@ -106,6 +112,8 @@ public partial class App : WpfApplication
         services.AddSingleton<AsanaTaskParser>();
         services.AddSingleton<FocusUpdateService>();
         services.AddSingleton<FocusSignalCollectorService>();
+        services.AddSingleton<ProposalInboxService>();
+        services.AddSingleton<ProposalSchedulerService>();
         services.AddSingleton<DecisionLogGeneratorService>();
         services.AddSingleton<DecisionLogService>();
         services.AddSingleton<CaptureService>();

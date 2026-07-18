@@ -27,13 +27,15 @@ internal static class ProposalReviewDialog
     /// <param name="titleIcon">タイトルアイコン文字 (例: "⟳", "⚡")</param>
     /// <param name="extraInfo">サマリ下に表示する追加情報 (null で非表示)</param>
     /// <param name="refineFunc">リファイン関数 (currentProposed, instructions) → refined</param>
+    /// <param name="onReject">Reject ボタンのコールバック。null 以外で Reject ボタンを表示する (Skip とは別。呼び出し後 apply=false で完了する)</param>
     public static Task<(bool apply, string? content)> ShowAsync(
         Window owner,
         FileUpdateProposal proposal,
         string titleText,
         string titleIcon = "⟳",
         string? extraInfo = null,
-        Func<string, string, Task<string>>? refineFunc = null)
+        Func<string, string, Task<string>>? refineFunc = null,
+        Action? onReject = null)
     {
         var tcs = new TaskCompletionSource<(bool apply, string? content)>();
 
@@ -223,6 +225,12 @@ internal static class ProposalReviewDialog
             Content = "Apply", Appearance = Wpf.Ui.Controls.ControlAppearance.Primary,
             MinWidth = 90, Height = 32, Margin = new Thickness(0, 0, 8, 0)
         };
+        var rejectButton = new Wpf.Ui.Controls.Button
+        {
+            Content = "Reject", Appearance = Wpf.Ui.Controls.ControlAppearance.Danger,
+            MinWidth = 80, Height = 32, Margin = new Thickness(0, 0, 8, 0),
+            Visibility = onReject != null ? Visibility.Visible : Visibility.Collapsed
+        };
         var skipButton = new Wpf.Ui.Controls.Button
         {
             Content = "Skip", Appearance = Wpf.Ui.Controls.ControlAppearance.Secondary,
@@ -235,7 +243,7 @@ internal static class ProposalReviewDialog
             MinWidth = 90, Height = 32
         };
         var footerLeft  = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Left,  Children = { debugButton } };
-        var footerRight = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Children = { applyButton, skipButton } };
+        var footerRight = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Children = { applyButton, rejectButton, skipButton } };
         var footerGrid  = new Grid { Margin = new Thickness(16, 4, 16, 10) };
         footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -313,6 +321,11 @@ internal static class ProposalReviewDialog
         titleBar.MouseLeftButtonDown += (s, e) => dialog.DragMove();
         closeBtn.Click    += (s, e) => Complete(false, null);
         skipButton.Click  += (s, e) => Complete(false, null);
+        rejectButton.Click += (s, e) =>
+        {
+            onReject?.Invoke();
+            Complete(false, null);
+        };
         applyButton.Click += (s, e) => Complete(true, currentProposed);
         dialog.Closed += (s, e) =>
         {

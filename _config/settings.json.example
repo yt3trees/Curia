@@ -20,5 +20,9 @@
   "llmApiVersion": "2024-12-01-preview",
   "aiEnabled": false,
   "focusAutoUpdateBadgeEnabled": true,
-  "focusSignalLookbackDays": 14
+  "focusSignalLookbackDays": 14,
+  "proposalInboxEnabled": false,
+  "proposalScanIntervalHours": 4,
+  "proposalMaxPerDay": 3,
+  "proposalBalloonEnabled": true
 }

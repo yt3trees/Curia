@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.DependencyInjection;
 using Wpf.Ui;
 using Wpf.Ui.Controls;
@@ -71,6 +72,17 @@ public partial class MainWindow : FluentWindow
         Loaded += OnLoaded;
         Closing += OnClosing;
         KeyDown += OnKeyDown;
+
+        // Proposal Inbox の件数変化をトレイバッジとバルーンに反映する
+        WeakReferenceMessenger.Default.Register<ProposalInboxChangedMessage>(this, (_, msg) =>
+        {
+            Dispatcher.Invoke(() =>
+            {
+                _trayService.UpdateBadge(msg.PendingCount);
+                if (msg.AddedItem is { } added && _configService.LoadSettings().ProposalBalloonEnabled)
+                    _trayService.ShowBalloonTip("New AI proposal", $"{added.ProjectName}: {added.SummaryFirstLine}");
+            });
+        });
         // 最大化ボタン (wpf-ui TitleBar) を横取りして CloakAndMaximize 経由にする
         CommandBindings.Add(new CommandBinding(
             SystemCommands.MaximizeWindowCommand,
@@ -306,7 +318,13 @@ public partial class MainWindow : FluentWindow
         // トレイアイコン初期化
         _trayService.OnActivated = ToggleVisibility;
         _trayService.OnCaptureActivated = ShowCaptureWindow;
+        _trayService.OnProposalsActivated = () =>
+        {
+            BringToFront();
+            RootNavigation.Navigate(typeof(DashboardPage));
+        };
         _trayService.Initialize(this);
+        _trayService.UpdateBadge(_serviceProvider.GetRequiredService<ProposalInboxService>().PendingCount);
 
         // ウィンドウアイコンをトレイアイコン (ダイヤモンド) と統一
         if (_trayService.DiamondBitmapSource != null)

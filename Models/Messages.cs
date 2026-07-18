@@ -51,3 +51,21 @@ public class TextColorChangedMessage(string editorTextColor, string markdownRend
     public string EditorTextColor { get; } = editorTextColor;
     public string MarkdownRenderTextColor { get; } = markdownRenderTextColor;
 }
+
+/// <summary>
+/// Proposal Inbox の Pending 件数が変わったときのメッセージ。
+/// AddedItem は新規追加によって発生した場合のみ非 null (バルーン通知用)。
+/// </summary>
+public class ProposalInboxChangedMessage(int pendingCount, ProposalItem? addedItem = null)
+{
+    public int PendingCount { get; } = pendingCount;
+    public ProposalItem? AddedItem { get; } = addedItem;
+}
+
+/// <summary>
+/// Proposal Inbox の設定 (有効化/スキャン間隔など) が変わったときのメッセージ。
+/// スケジューラの再起動トリガー。
+/// </summary>
+public class ProposalInboxSettingsChangedMessage
+{
+}

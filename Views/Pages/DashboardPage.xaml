@@ -20,8 +20,9 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ===== ツールバー ===== -->
-        <Border Grid.Row="0" Background="{DynamicResource AppSurface0}" Padding="8,6">
+        <!-- ===== ツールバー + Proposal Inbox ===== -->
+        <StackPanel Grid.Row="0">
+        <Border Background="{DynamicResource AppSurface0}" Padding="8,6">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -113,6 +114,75 @@
                 </StackPanel>
             </Grid>
         </Border>
+
+        <!-- ===== Proposal Inbox バナー (Pending 提案) ===== -->
+        <ItemsControl ItemsSource="{Binding PendingProposals}"
+                      Visibility="{Binding HasPendingProposals, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="{x:Type models:ProposalItem}">
+                    <Border BorderThickness="3,0,0,0"
+                            BorderBrush="{DynamicResource AppPeach}"
+                            Padding="6,3"
+                            Margin="0,0,0,1"
+                            Background="{DynamicResource AppSurface1}"
+                            Cursor="Hand"
+                            Tag="{Binding}"
+                            MouseLeftButtonUp="OnProposalRowClickAsync">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="✦"
+                                       FontSize="11"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AppPeach}"
+                                       Margin="0,0,5,0"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Title}"
+                                       FontWeight="SemiBold"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AppText}"
+                                       Margin="0,0,6,0"/>
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding SummaryFirstLine}"
+                                       FontSize="11"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AppOverlay1}"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Grid.Column="3"
+                                       Text="{Binding CreatedAgoText}"
+                                       FontSize="11"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AppSubtext0}"
+                                       Margin="6,0,0,0"/>
+                            <ui:Button Grid.Column="4"
+                                       Content="Review"
+                                       Height="22" Padding="6,0" FontSize="11"
+                                       Margin="6,0,0,0"
+                                       Appearance="Secondary"
+                                       Tag="{Binding}"
+                                       Click="OnProposalReviewClickAsync"/>
+                            <ui:Button Grid.Column="5"
+                                       Content="×"
+                                       Height="22" Padding="6,0" FontSize="11"
+                                       Margin="4,0,0,0"
+                                       Appearance="Secondary"
+                                       ToolTip="Reject this proposal"
+                                       Tag="{Binding}"
+                                       Click="OnProposalRejectClickAsync"/>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        </StackPanel>
 
         <!-- ===== カードエリア ===== -->
         <Grid Grid.Row="1">

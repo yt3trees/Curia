@@ -70,6 +70,11 @@ public class AppSettings
     public bool AiEnabled { get; set; } = false;               // AI 機能を有効にするか
     public bool FocusAutoUpdateBadgeEnabled { get; set; } = true;  // Dashboard の Auto-update focus アクション表示
     public int FocusSignalLookbackDays { get; set; } = 14;         // 行動シグナル収集期間の上限 (日)
+    // Proposal Inbox (バックグラウンドの Focus 更新提案生成)
+    public bool ProposalInboxEnabled { get; set; } = false;        // 提案インボックス機能を有効にするか
+    public int ProposalScanIntervalHours { get; set; } = 4;        // バックグラウンドスキャン間隔 (時間)
+    public int ProposalMaxPerDay { get; set; } = 3;                // 1日あたりの提案生成上限
+    public bool ProposalBalloonEnabled { get; set; } = true;       // 新規提案時のバルーン通知
     public int AgentMaxIterations { get; set; } = 10;
     public int AgentToolResultMaxChars { get; set; } = 30000;
     public bool AgentCompatibilityOk { get; set; } = false;

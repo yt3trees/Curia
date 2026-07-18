@@ -463,6 +463,85 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
         }
     }
 
+    // ---------- Proposal Inbox ----------
+
+    private async void OnProposalRowClickAsync(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: ProposalItem item }) return;
+        e.Handled = true;
+        await ReviewProposalAsync(item);
+    }
+
+    private async void OnProposalReviewClickAsync(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not FrameworkElement { Tag: ProposalItem item }) return;
+        await ReviewProposalAsync(item);
+    }
+
+    private async void OnProposalRejectClickAsync(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not FrameworkElement { Tag: ProposalItem item }) return;
+        try
+        {
+            await ViewModel.RejectProposalAsync(item);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Dashboard] Reject proposal failed: {ex}");
+        }
+    }
+
+    private async Task ReviewProposalAsync(ProposalItem item)
+    {
+        if (Window.GetWindow(this) is not Window owner) return;
+        try
+        {
+            // 表示前の陳腐化チェック: 手動更新されていたら Accept させない
+            if (ProposalInboxService.IsStale(item))
+            {
+                await ViewModel.ExpireProposalAsync(item);
+                System.Windows.MessageBox.Show(
+                    "This proposal has expired because the target file was modified after it was generated.",
+                    "Proposal Inbox",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Information);
+                return;
+            }
+
+            var result = item.ToFocusUpdateResult();
+            bool rejected = false;
+            var (apply, content) = await Views.ProposalReviewDialog.ShowAsync(
+                owner, result, $"Proposal — {item.Title}", "✦",
+                extraInfo: $"Created {item.CreatedAgoText}",
+                onReject: () => rejected = true);
+
+            if (rejected)
+            {
+                await ViewModel.RejectProposalAsync(item);
+                return;
+            }
+            if (!apply) return;
+
+            var (ok, message) = await ViewModel.AcceptProposalAsync(item, content ?? result.ProposedContent);
+            if (!ok)
+                System.Windows.MessageBox.Show(
+                    message,
+                    "Proposal Inbox",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show(
+                $"Failed to process the proposal:\n{ex.Message}",
+                "Proposal Inbox",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+        }
+    }
+
     private void OnActivityBarClick(object sender, MouseButtonEventArgs e)
     {
         if (sender is FrameworkElement { Tag: ProjectCardViewModel card })
