@@ -32,6 +32,7 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
     private readonly TrayService _trayService;
     private readonly ScheduleService _scheduleService;
     private readonly PomodoroViewModel _pomodoroViewModel;
+    private readonly ProposalSchedulerService _proposalSchedulerService;
 
     public DashboardPage(
         DashboardViewModel viewModel,
@@ -46,7 +47,8 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
         ProjectDiscoveryService discoveryService,
         TrayService trayService,
         ScheduleService scheduleService,
-        PomodoroViewModel pomodoroViewModel)
+        PomodoroViewModel pomodoroViewModel,
+        ProposalSchedulerService proposalSchedulerService)
     {
         ViewModel = viewModel;
         _llmClientService = llmClientService;
@@ -61,6 +63,7 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
         _trayService = trayService;
         _scheduleService = scheduleService;
         _pomodoroViewModel = pomodoroViewModel;
+        _proposalSchedulerService = proposalSchedulerService;
         DataContext = ViewModel;
 
         ViewModel.OnOpenInEditor = project =>
@@ -1330,6 +1333,27 @@ public partial class DashboardPage : WpfUserControl, INavigableView<DashboardVie
 
     private void OnSilenceAlertForceRefreshClick(object sender, RoutedEventArgs e)
         => _ = ViewModel.ForceRefreshSilenceAlertsAsync();
+
+    private void OnProposalScanForceClick(object sender, RoutedEventArgs e)
+        => _ = _proposalSchedulerService.ScanAndGenerateAsync();
+
+    private void OnOpenProposalScanLogClick(object sender, RoutedEventArgs e)
+    {
+        if (Window.GetWindow(this) is not Window owner) return;
+        var logPath = Path.Combine(_configService.ConfigDir, "proposals", "scan_log.txt");
+        string content;
+        try
+        {
+            content = File.Exists(logPath)
+                ? File.ReadAllText(logPath)
+                : "(No scan log yet. Run \"Scan proposals now (Force)\" or wait for the next scheduled scan.)";
+        }
+        catch (Exception ex)
+        {
+            content = $"Failed to read scan log:\n{ex.Message}";
+        }
+        Views.ProposalReviewDialog.ShowTextDialog(owner, "Proposal Scan Log", content, scrollToEnd: true);
+    }
 
     private void OnTodayQueueOpenAsana(object sender, RoutedEventArgs e)
     {

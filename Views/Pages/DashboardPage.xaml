@@ -44,8 +44,16 @@
                         <ui:SymbolIcon Symbol="WeatherSunny24"/>
                     </ui:Button>
                     <ui:Button Margin="0,0,6,0" Height="34" Padding="10,0" FontSize="13"
-                               ToolTip="View capture log"
+                               ToolTip="View capture log (right-click for other logs)"
                                Click="OnShowCaptureLogClick">
+                        <ui:Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="View capture log"
+                                          Click="OnShowCaptureLogClick"/>
+                                <MenuItem Header="View proposal scan log"
+                                          Click="OnOpenProposalScanLogClick"/>
+                            </ContextMenu>
+                        </ui:Button.ContextMenu>
                         <ui:SymbolIcon Symbol="Note24"/>
                     </ui:Button>
                     <!-- ポモドーロタイマーボタン -->
@@ -80,7 +88,14 @@
                         <ComboBoxItem Tag="60" Content="60 min"/>
                     </ComboBox>
                     <ui:Button Content="↻" Margin="6,0,0,0" Height="34" Padding="10,0" FontSize="13"
-                               ToolTip="Force Refresh" Click="OnRefreshClick"/>
+                               ToolTip="Force Refresh" Click="OnRefreshClick">
+                        <ui:Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Scan proposals now (Force)"
+                                          Click="OnProposalScanForceClick"/>
+                            </ContextMenu>
+                        </ui:Button.ContextMenu>
+                    </ui:Button>
                     <ui:Button Margin="6,0,0,0" Height="34" Padding="8,0"
                                ToolTip="Toggle hidden projects"
                                Click="OnToggleShowHidden">

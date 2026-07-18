@@ -54,6 +54,7 @@ public class ProposalSchedulerService : IDisposable
                                             null,
                                             TimeSpan.FromMinutes(5),
                                             TimeSpan.FromHours(intervalHours));
+        Log($"Scheduler started (interval {intervalHours}h, first scan in 5 min)");
     }
 
     public void RestartScheduler()
@@ -70,15 +71,27 @@ public class ProposalSchedulerService : IDisposable
         try
         {
             // 深夜帯 (0:00-5:59) は生成しない (Standup / SilenceAlert と同じ扱い)
-            if (DateTime.Now.Hour < 6) return;
+            if (DateTime.Now.Hour < 6)
+            {
+                Log("Scan skipped: quiet hours (0:00-5:59)");
+                return;
+            }
 
             var ct = _cts.Token;
             var settings = _configService.LoadSettings();
-            if (!settings.AiEnabled || !settings.ProposalInboxEnabled) return;
+            if (!settings.AiEnabled || !settings.ProposalInboxEnabled)
+            {
+                Log("Scan skipped: AI or Proposal Inbox disabled");
+                return;
+            }
 
             var maxPerDay = Math.Max(1, settings.ProposalMaxPerDay);
             var createdToday = await _inbox.CountCreatedTodayAsync();
-            if (createdToday >= maxPerDay) return;
+            if (createdToday >= maxPerDay)
+            {
+                Log($"Scan skipped: daily cap reached ({createdToday}/{maxPerDay})");
+                return;
+            }
 
             // 手動編集で陳腐化した Pending を先に整理しておく
             await _inbox.ExpireStaleAsync();
@@ -87,56 +100,123 @@ public class ProposalSchedulerService : IDisposable
             var hiddenKeys = _configService.LoadHiddenProjects();
             var pending = await _inbox.LoadPendingAsync();
 
+            Log($"Scan started: {allProjects.Count} projects, created today {createdToday}/{maxPerDay}");
+            int skippedHidden = 0, skippedNoFocus = 0, skippedNoSignals = 0, skippedPending = 0, generated = 0;
+
             foreach (var project in allProjects)
             {
                 ct.ThrowIfCancellationRequested();
-                if (createdToday >= maxPerDay) break;
+                if (createdToday >= maxPerDay)
+                {
+                    Log($"Daily cap reached ({createdToday}/{maxPerDay}), stopping scan");
+                    break;
+                }
 
                 try
                 {
-                    if (hiddenKeys.Contains(project.HiddenKey)) continue;
-                    if (string.IsNullOrWhiteSpace(project.FocusFile) || !File.Exists(project.FocusFile)) continue;
+                    if (hiddenKeys.Contains(project.HiddenKey))
+                    {
+                        skippedHidden++;
+                        continue;
+                    }
+                    if (string.IsNullOrWhiteSpace(project.FocusFile) || !File.Exists(project.FocusFile))
+                    {
+                        skippedNoFocus++;
+                        continue;
+                    }
 
                     // 同一プロジェクト (general) の Pending が残っている間は再生成しない
                     if (pending.Any(p =>
                             string.Equals(p.ProjectName, project.Name, StringComparison.OrdinalIgnoreCase) &&
                             string.IsNullOrEmpty(p.WorkstreamId)))
+                    {
+                        skippedPending++;
                         continue;
+                    }
 
                     var signals = await _signalCollector.CollectAsync(project, ct);
-                    if (signals.IsEmpty) continue;
+                    if (signals.IsEmpty)
+                    {
+                        skippedNoSignals++;
+                        continue;
+                    }
 
                     // focus が実活動より古い場合のみ対象
                     var latestSignal = GetLatestSignalTime(signals);
-                    if (latestSignal is null) continue;
-                    if (latestSignal.Value <= File.GetLastWriteTime(project.FocusFile)) continue;
+                    var focusLastWrite = File.GetLastWriteTime(project.FocusFile);
+                    if (latestSignal is null)
+                    {
+                        // 未コミットファイルのみ = 日付を持たないシグナルなので鮮度判定できない
+                        Log($"  {project.Name}: only undated signals (uncommitted files), skip");
+                        continue;
+                    }
+                    if (latestSignal.Value <= focusLastWrite)
+                    {
+                        Log($"  {project.Name}: latest signal {latestSignal:yyyy-MM-dd HH:mm} <= focus {focusLastWrite:yyyy-MM-dd HH:mm}, skip");
+                        continue;
+                    }
 
+                    Log($"  {project.Name}: latest signal {latestSignal:yyyy-MM-dd HH:mm} > focus {focusLastWrite:yyyy-MM-dd HH:mm}, generating...");
                     var result = await _focusUpdateService.GenerateProposalAsync(
                         project, workstreamId: null, ct, signals: signals);
 
-                    // 生成中に手動編集されていないかを最終確認してから登録
                     var item = ProposalItem.FromFocusResult(result, project.Name);
                     await _inbox.AddAsync(item);
                     createdToday++;
-                    Debug.WriteLine($"[ProposalScheduler] Generated proposal for {project.Name}");
+                    generated++;
+                    Log($"  {project.Name}: proposal generated ({item.Id})");
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
                     // 1 プロジェクトの失敗で全体を止めない
-                    Debug.WriteLine($"[ProposalScheduler] Generation failed for {project.Name}: {ex.Message}");
+                    Log($"  {project.Name}: generation FAILED - {ex.Message}");
                 }
             }
+
+            Log($"Scan finished: generated {generated}, skipped (hidden {skippedHidden} / no focus {skippedNoFocus} / no signals {skippedNoSignals} / pending exists {skippedPending})");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
+            Log($"Scan FAILED: {ex.Message}");
             Debug.WriteLine($"[ProposalScheduler] ScanAndGenerateAsync failed: {ex}");
         }
         finally
         {
             _scanGate.Release();
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // スキャンログ: [config_dir]\proposals\scan_log.txt
+    // 動作の可視化用。肥大化しないよう上限行数を超えたら古い行を切り捨てる。
+    // -----------------------------------------------------------------------
+    private const int LogMaxLines = 500;
+    private const int LogKeepLines = 250;
+    private readonly object _logLock = new();
+
+    private string LogPath => Path.Combine(_configService.ConfigDir, "proposals", "scan_log.txt");
+
+    private void Log(string message)
+    {
+        try
+        {
+            lock (_logLock)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+                File.AppendAllText(LogPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}");
+
+                var lines = File.ReadAllLines(LogPath);
+                if (lines.Length > LogMaxLines)
+                    File.WriteAllLines(LogPath, lines[^LogKeepLines..]);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[ProposalScheduler] Log write failed: {ex.Message}");
+        }
+        Debug.WriteLine($"[ProposalScheduler] {message}");
     }
 
     /// <summary>収集済みシグナルのうち最も新しい活動日時を返す。</summary>

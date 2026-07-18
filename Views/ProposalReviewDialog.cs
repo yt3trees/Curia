@@ -389,6 +389,21 @@ internal static class ProposalReviewDialog
 
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// テーマ準拠の読み取り専用テキストダイアログを表示する汎用ヘルパー。
+    /// スキャンログなどのプレーンテキスト表示に使う。
+    /// </summary>
+    internal static void ShowTextDialog(Window owner, string title, string message, bool scrollToEnd = false)
+    {
+        var appResources = Application.Current.Resources;
+        var surface  = (System.Windows.Media.Brush)appResources["AppSurface0"];
+        var surface1 = (System.Windows.Media.Brush)appResources["AppSurface1"];
+        var surface2 = (System.Windows.Media.Brush)appResources["AppSurface2"];
+        var text     = (System.Windows.Media.Brush)appResources["AppText"];
+        var subtext  = (System.Windows.Media.Brush)appResources["AppSubtext0"];
+        ShowDebugDialog(owner, title, message, surface, surface1, surface2, text, subtext, scrollToEnd);
+    }
+
     private static void AddBottomViewportPadding(TextEditor editor)
     {
         editor.Options.AllowScrollBelowDocument = false;
@@ -419,7 +434,8 @@ internal static class ProposalReviewDialog
         System.Windows.Media.Brush surface1,
         System.Windows.Media.Brush surface2,
         System.Windows.Media.Brush text,
-        System.Windows.Media.Brush subtext)
+        System.Windows.Media.Brush subtext,
+        bool scrollToEnd = false)
     {
         var titleBar = new Grid { Background = surface1, Height = 38 };
         titleBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -487,6 +503,8 @@ internal static class ProposalReviewDialog
             });
         titleBar.MouseLeftButtonDown += (s, e) => d.DragMove();
         closeBtn.Click += (s, e) => d.Close();
+        if (scrollToEnd)
+            textBox.Loaded += (s, e) => textBox.ScrollToEnd();
         d.ShowDialog();
     }
 }
