@@ -899,7 +899,7 @@
                             Click="OnImportRemotePinsClick"
                             ToolTip="Pin folders shared from another PC">
                         <Button.Style>
-                            <Style TargetType="Button">
+                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding HasRemotePinCandidates}" Value="True">
