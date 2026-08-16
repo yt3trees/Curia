@@ -15,6 +15,7 @@ public class AgentDeploymentService
         public ProjectInfo? Project { get; init; }
         public string TargetSubPath { get; init; } = "";
         public GlobalDeploymentProfile? Profile { get; init; }
+        public string FolderPath { get; init; } = "";
     }
 
     private readonly ConfigService _configService;
@@ -45,6 +46,32 @@ public class AgentDeploymentService
             Profile = profile,
             TargetSubPath = ""
         };
+    }
+
+    public DeploymentTarget CreateFolderTarget(string folderPath)
+    {
+        var normalized = NormalizeFolderPath(folderPath);
+        return new DeploymentTarget
+        {
+            ScopeType = DeploymentScopeType.Folder,
+            ScopeId = normalized,
+            FolderPath = normalized,
+            TargetSubPath = ""
+        };
+    }
+
+    private static string NormalizeFolderPath(string? folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(folderPath))
+            return "";
+        try
+        {
+            return Path.GetFullPath(folderPath.Trim());
+        }
+        catch
+        {
+            return folderPath.Trim();
+        }
     }
 
     // ─── Agent Deploy/Undeploy ────────────────────────────────────────────
@@ -279,11 +306,7 @@ public class AgentDeploymentService
         }
         else
         {
-            var projectPath = target.Project?.Path ?? throw new InvalidOperationException("Project is required for project scope.");
-            var normalizedSubPath = NormalizeTargetSubPath(target.TargetSubPath);
-            var targetDir = string.IsNullOrEmpty(normalizedSubPath)
-                ? projectPath
-                : Path.Combine(projectPath, normalizedSubPath);
+            var targetDir = GetTargetDirectory(target);
 
             if (cli == CliTarget.Copilot)
             {
@@ -459,11 +482,7 @@ public class AgentDeploymentService
                 : Path.Combine(basePath, "agents");
         }
 
-        var projectPath = target.Project?.Path ?? throw new InvalidOperationException("Project is required for project scope.");
-        var normalizedSubPath = NormalizeTargetSubPath(target.TargetSubPath);
-        var targetDir = string.IsNullOrEmpty(normalizedSubPath)
-            ? projectPath
-            : Path.Combine(projectPath, normalizedSubPath);
+        var targetDir = GetTargetDirectory(target);
 
         if (cli == CliTarget.Copilot)
         {
@@ -485,13 +504,24 @@ public class AgentDeploymentService
         return Path.Combine(resolved ?? localCliDir, "agents");
     }
 
-    private static string? ResolveContextFilePath(string projectPath, string targetSubPath, CliTarget cli)
+    private static string GetTargetDirectory(DeploymentTarget target)
     {
-        var normalizedSubPath = NormalizeTargetSubPath(targetSubPath);
-        var targetDir = string.IsNullOrEmpty(normalizedSubPath)
+        if (target.ScopeType == DeploymentScopeType.Folder)
+        {
+            if (string.IsNullOrWhiteSpace(target.FolderPath))
+                throw new InvalidOperationException("Folder path is required for folder scope.");
+            return target.FolderPath;
+        }
+
+        var projectPath = target.Project?.Path ?? throw new InvalidOperationException("Project is required for project scope.");
+        var normalizedSubPath = NormalizeTargetSubPath(target.TargetSubPath);
+        return string.IsNullOrEmpty(normalizedSubPath)
             ? projectPath
             : Path.Combine(projectPath, normalizedSubPath);
+    }
 
+    private static string? ResolveContextFilePath(string targetDir, CliTarget cli)
+    {
         if (cli == CliTarget.Copilot)
         {
             var githubDir = Path.Combine(targetDir, ".github");
@@ -523,12 +553,20 @@ public class AgentDeploymentService
             return result;
         }
 
+        if (target.ScopeType == DeploymentScopeType.Folder)
+        {
+            var folderPrimary = ResolveContextFilePath(GetTargetDirectory(target), cli);
+            if (!string.IsNullOrWhiteSpace(folderPrimary))
+                result.Add(folderPrimary);
+            return result;
+        }
+
         var projectPath = target.Project?.Path;
         if (string.IsNullOrWhiteSpace(projectPath))
             return result;
 
         var targetSubPath = NormalizeTargetSubPath(target.TargetSubPath);
-        var primary = ResolveContextFilePath(projectPath, targetSubPath, cli);
+        var primary = ResolveContextFilePath(GetTargetDirectory(target), cli);
         if (!string.IsNullOrWhiteSpace(primary))
             result.Add(primary);
 
@@ -538,7 +576,7 @@ public class AgentDeploymentService
             var sharedDir = Path.Combine(projectPath, "shared");
             if (Directory.Exists(sharedDir))
             {
-                var sharedPath = ResolveContextFilePath(projectPath, "shared", cli);
+                var sharedPath = ResolveContextFilePath(sharedDir, cli);
                 if (!string.IsNullOrWhiteSpace(sharedPath) &&
                     !result.Contains(sharedPath, StringComparer.OrdinalIgnoreCase))
                 {
@@ -912,6 +950,13 @@ public class AgentDeploymentService
             if (profile == null)
                 return null;
             return CreateGlobalTarget(profile);
+        }
+
+        if (scopeType == DeploymentScopeType.Folder)
+        {
+            if (string.IsNullOrWhiteSpace(scopeId) || !Directory.Exists(scopeId))
+                return null;
+            return CreateFolderTarget(scopeId);
         }
 
         var project = projects.FirstOrDefault(p => string.Equals(p.Name, scopeId, StringComparison.OrdinalIgnoreCase));

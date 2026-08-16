@@ -329,6 +329,7 @@ public partial class AgentHubViewModel : ObservableObject
     [ObservableProperty] private ObservableCollection<GlobalDeploymentProfile> globalProfiles = [];
     [ObservableProperty] private GlobalDeploymentProfile? selectedGlobalProfile;
     [ObservableProperty] private DeploymentScopeType selectedScopeType = DeploymentScopeType.Project;
+    [ObservableProperty] private string folderPath = "";
 
     [ObservableProperty] private ObservableCollection<DeployAgentItemViewModel> agentDeployItems = [];
     [ObservableProperty] private ObservableCollection<DeployRuleItemViewModel> ruleDeployItems = [];
@@ -341,6 +342,7 @@ public partial class AgentHubViewModel : ObservableObject
 
     public bool IsProjectScopeSelected => SelectedScopeType == DeploymentScopeType.Project;
     public bool IsGlobalScopeSelected => SelectedScopeType == DeploymentScopeType.Global;
+    public bool IsFolderScopeSelected => SelectedScopeType == DeploymentScopeType.Folder;
 
     public AgentHubViewModel(
         AgentHubService agentHubService,
@@ -434,9 +436,20 @@ public partial class AgentHubViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(IsProjectScopeSelected));
         OnPropertyChanged(nameof(IsGlobalScopeSelected));
+        OnPropertyChanged(nameof(IsFolderScopeSelected));
         ScopeStatusLabel = BuildScopeStatusLabel();
         StatusMessage = ScopeStatusLabel;
         QueueDeploymentRefresh(includeTargetCandidates: true);
+    }
+
+    partial void OnFolderPathChanged(string value)
+    {
+        if (SelectedScopeType == DeploymentScopeType.Folder)
+        {
+            ScopeStatusLabel = BuildScopeStatusLabel();
+            StatusMessage = ScopeStatusLabel;
+            QueueDeploymentRefresh(includeTargetCandidates: false);
+        }
     }
 
     partial void OnSelectedGlobalProfileChanged(GlobalDeploymentProfile? value)
@@ -959,6 +972,13 @@ public partial class AgentHubViewModel : ObservableObject
             return _deploymentService.CreateGlobalTarget(SelectedGlobalProfile);
         }
 
+        if (SelectedScopeType == DeploymentScopeType.Folder)
+        {
+            if (string.IsNullOrWhiteSpace(FolderPath) || !Directory.Exists(FolderPath))
+                return null;
+            return _deploymentService.CreateFolderTarget(FolderPath);
+        }
+
         if (SelectedProject == null)
             return null;
         return _deploymentService.CreateProjectTarget(SelectedProject, TargetSubPath);
@@ -968,6 +988,9 @@ public partial class AgentHubViewModel : ObservableObject
     {
         if (SelectedScopeType == DeploymentScopeType.Global)
             return "Scope=Global(Fixed)";
+
+        if (SelectedScopeType == DeploymentScopeType.Folder)
+            return $"Scope=Folder({(string.IsNullOrWhiteSpace(FolderPath) ? "(none)" : FolderPath)})";
 
         return $"Scope=Project(Project:{SelectedProject?.DisplayName ?? "(none)"})";
     }
@@ -1092,6 +1115,7 @@ public partial class AgentHubViewModel : ObservableObject
             var scopeType = SelectedScopeType;
             var project = SelectedProject;
             var profile = SelectedGlobalProfile;
+            var folderPath = FolderPath;
             if (scopeType == DeploymentScopeType.Project && project == null)
             {
                 if (version != _deploymentRefreshVersion)
@@ -1103,6 +1127,16 @@ public partial class AgentHubViewModel : ObservableObject
             }
 
             if (scopeType == DeploymentScopeType.Global && profile == null)
+            {
+                if (version != _deploymentRefreshVersion)
+                    return;
+
+                TargetSubPathCandidates = new ObservableCollection<string>([""]);
+                ClearDeploymentItems();
+                return;
+            }
+
+            if (scopeType == DeploymentScopeType.Folder && (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath)))
             {
                 if (version != _deploymentRefreshVersion)
                     return;
@@ -1125,9 +1159,12 @@ public partial class AgentHubViewModel : ObservableObject
                         ? BuildTargetSubPathCandidates(project)
                         : new List<string> { "" })
                     : null;
-                var target = scopeType == DeploymentScopeType.Project
-                    ? _deploymentService.CreateProjectTarget(project!, targetSubPath)
-                    : _deploymentService.CreateGlobalTarget(profile!);
+                var target = scopeType switch
+                {
+                    DeploymentScopeType.Project => _deploymentService.CreateProjectTarget(project!, targetSubPath),
+                    DeploymentScopeType.Folder => _deploymentService.CreateFolderTarget(folderPath),
+                    _ => _deploymentService.CreateGlobalTarget(profile!)
+                };
                 var snapshot = BuildDeploymentSnapshot(target, agentDefs, ruleDefs, skillDefs);
                 return (candidates, snapshot);
             }, ct);

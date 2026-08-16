@@ -15,7 +15,8 @@ public enum CliTarget
 public enum DeploymentScopeType
 {
     Project,
-    Global
+    Global,
+    Folder
 }
 
 public class AgentDefinition

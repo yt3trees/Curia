@@ -106,6 +106,24 @@ public partial class AgentHubPage : WpfUserControl, INavigableView<AgentHubViewM
         ViewModel.SelectedScopeType = DeploymentScopeType.Global;
     }
 
+    private void OnFolderScopeRadioClick(object sender, RoutedEventArgs e)
+    {
+        ViewModel.SelectedScopeType = DeploymentScopeType.Folder;
+    }
+
+    private void OnBrowseFolderClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select folder to deploy agents/skills into",
+            Multiselect = false
+        };
+        if (!string.IsNullOrWhiteSpace(ViewModel.FolderPath) && Directory.Exists(ViewModel.FolderPath))
+            dialog.InitialDirectory = ViewModel.FolderPath;
+        if (dialog.ShowDialog() != true) return;
+        ViewModel.FolderPath = dialog.FolderName;
+    }
+
     // ─── Library list selection ───────────────────────────────────────────
 
     private void OnAgentSelectionChanged(object sender, SelectionChangedEventArgs e)
