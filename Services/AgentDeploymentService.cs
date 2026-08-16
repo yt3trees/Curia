@@ -287,9 +287,9 @@ public class AgentDeploymentService
 
             if (cli == CliTarget.Copilot)
             {
-                var copilotDir = Path.Combine(targetDir, ".copilot");
-                var resolved = ResolveJunctionTarget(copilotDir);
-                skillsBaseDir = Path.Combine(resolved ?? copilotDir, "skills");
+                var githubDir = Path.Combine(targetDir, ".github");
+                var resolved = ResolveJunctionTarget(githubDir);
+                skillsBaseDir = Path.Combine(resolved ?? githubDir, "skills");
             }
             else
             {
@@ -467,9 +467,9 @@ public class AgentDeploymentService
 
         if (cli == CliTarget.Copilot)
         {
-            var copilotDir = Path.Combine(targetDir, ".copilot");
-            var resolvedCopilot = ResolveJunctionTarget(copilotDir);
-            return Path.Combine(resolvedCopilot ?? copilotDir, "agents");
+            var githubDir = Path.Combine(targetDir, ".github");
+            var resolvedGithub = ResolveJunctionTarget(githubDir);
+            return Path.Combine(resolvedGithub ?? githubDir, "agents");
         }
 
         var cliDirName = cli switch
